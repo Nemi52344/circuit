@@ -1,0 +1,29 @@
+# Dependencies and build output
+node_modules
+.next
+
+# The database itself. It holds the Supabase service key, the Meta app secret and
+# token, the Higgsfield keys and the Zapier hook URL — none of which belong in a
+# repository, public or private.
+data/circuit.db*
+
+# Backups are copies of that same database, with the same secrets inside them.
+data/backups/
+
+# Everything the company's own material lives in: product photography, generated
+# drafts, scraped references, the morning briefings, and the receipts and card
+# statements. Business documents, not source code.
+data/uploads/*
+!data/uploads/.gitkeep
+data/receipts/
+data/inbox/
+data/product/
+data/sources/*
+!data/sources/README.txt
+
+# Credentials of any kind
+.env*
+*.pem
+
+# Build artefacts
+tsconfig.tsbuildinfo
