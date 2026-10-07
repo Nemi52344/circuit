@@ -43,6 +43,13 @@ export const POST = handle(async (req) => {
       if (info) {
         setSetting("meta_token_until", info.never ? "" : info.expires_at);
         setSetting("meta_token_scopes", info.scopes.join(","));
+      } else {
+        /* Meta would not say what this token carries. The previous token's permissions must not
+           survive it: they describe a credential that is gone, and keeping them would have
+           Circuit refuse a perfectly good token for a permission the old one lacked. Blank means
+           "not known", which every reader is expected to handle. */
+        setSetting("meta_token_until", "");
+        setSetting("meta_token_scopes", "");
       }
     } else {
       getDb().prepare("DELETE FROM settings WHERE key IN ('meta_token','meta_token_until','meta_token_scopes')").run();

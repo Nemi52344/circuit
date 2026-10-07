@@ -30,20 +30,28 @@ const scopes = () => (getSetting("meta_token_scopes") || "").split(",").map((s) 
 export function publishable(): CanPublish[] {
   const have = scopes();
   const token = Boolean(getSetting("meta_token"));
-  const need = (list: string[]) => list.filter((s) => !have.includes(s));
+  /* A token whose permissions were never read is a different state from a token known to be
+     short of one. Naming a specific missing permission here would be a claim about a credential
+     Circuit never inspected — and the likeliest way to reach this state is a good token saved
+     while Meta was unreachable, which is exactly when a confident wrong answer costs most. */
+  const unread = token && !have.length;
+  const need = (list: string[]) => (unread ? [] : list.filter((s) => !have.includes(s)));
 
   const ig = need(["instagram_content_publish"]);
   const fb = need(["pages_manage_posts", "pages_show_list"]);
+  const unreadNote = "Meta would not say what this token is allowed to do. Open Settings and press Check connection.";
   return [
     {
-      platform: "Instagram", ready: token && !ig.length, missing: ig,
+      platform: "Instagram", ready: token && !unread && !ig.length, missing: unread ? ["unknown"] : ig,
       note: !token ? "Meta is not connected."
+        : unread ? unreadNote
         : ig.length ? `The token was granted without ${ig.join(" and ")}. Reconnect Meta in Settings with that ticked.`
         : "Circuit can publish to Instagram itself.",
     },
     {
-      platform: "Facebook", ready: token && !fb.length, missing: fb,
+      platform: "Facebook", ready: token && !unread && !fb.length, missing: unread ? ["unknown"] : fb,
       note: !token ? "Meta is not connected."
+        : unread ? unreadNote
         : fb.length ? `The token was granted without ${fb.join(" and ")}. Reconnect Meta in Settings with that ticked.`
         : "Circuit can publish to the page itself.",
     },

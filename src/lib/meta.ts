@@ -225,6 +225,9 @@ export async function renewStoredToken() {
   if (info) {
     setSetting("meta_token_scopes", info.scopes.join(","));
     if (!info.never && info.expires_at) setSetting("meta_token_until", info.expires_at);
+  } else {
+    /* Same reasoning as saving a token by hand: the old permissions belong to the old token. */
+    setSetting("meta_token_scopes", "");
   }
   return { days: r.days, until: getSetting("meta_token_until") };
 }
