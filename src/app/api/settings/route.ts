@@ -18,6 +18,10 @@ export const GET = handle(async () => {
     has_hf: Boolean(hfId && hfSecret),
     hf_hint: hfId ? `${hfId.slice(0, 6)}...${hfId.slice(-4)}` : "",
     ig_user_id: getSetting("ig_user_id") || "",
+    /* So the Meta box can hand over a link with the app and every permission already chosen,
+       rather than asking somebody to find six checkboxes in a list of ninety. */
+    meta_app_id: getSetting("meta_app_id") || "",
+    meta_scopes: (getSetting("meta_token_scopes") || "").split(",").filter(Boolean),
     brand: getBrand(),
     defaults: DEFAULT_BRAND,
   });

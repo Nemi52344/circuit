@@ -9,7 +9,7 @@ import type { Brand } from "@/lib/types";
 
 type ClaudeStatus = { installed: boolean; cli_path: string | null; version: string; logged_in: boolean; auth_method: string; higgsfield: boolean; mcp_detail: string; ready: boolean };
 
-type Settings = { has_key: boolean; key_hint: string; has_meta: boolean; meta_hint: string; has_hf: boolean; hf_hint: string; ig_user_id: string; brand: Brand; defaults: Brand };
+type Settings = { has_key: boolean; key_hint: string; has_meta: boolean; meta_hint: string; has_hf: boolean; hf_hint: string; ig_user_id: string; brand: Brand; defaults: Brand; meta_app_id?: string; meta_scopes?: string[] };
 
 export default function SettingsPage() {
   const [s, setS] = useState<Settings | null>(null);
@@ -232,7 +232,20 @@ export default function SettingsPage() {
 
           <div className="stack" style={{ gap: 10 }}>
             <div className="panel-head" style={{ marginBottom: 0 }}><h3>Meta connection</h3>{s.has_meta ? <Pill tone="ok">Connected</Pill> : <Pill>Not connected</Pill>}</div>
-            <p className="small muted">One token covers competitors&apos; Instagram posts and, with the ads_read permission, competitor ads. Get it from the <a href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noreferrer" style={{ textDecoration: "underline" }}>Graph API Explorer</a>.</p>
+            <p className="small muted">
+              One token covers everything: reading competitors, our own numbers, publishing to Instagram and the
+              Facebook page, and reading comments. Open the{" "}
+              <a href={`https://developers.facebook.com/tools/explorer/?app_id=${s.meta_app_id || ""}&permissions=${META_SCOPES}`}
+                target="_blank" rel="noreferrer" style={{ textDecoration: "underline" }}>Graph API Explorer with all of them already ticked</a>,
+              press Generate Access Token, sign in, and paste it below. Circuit swaps it for a 60-day one and renews it by itself.
+            </p>
+            <div className="actions" style={{ marginTop: 4 }}>
+              <button className="btn small ghost" type="button"
+                onClick={() => navigator.clipboard?.writeText(META_SCOPES).then(() => push("Permissions copied", "ok")).catch(() => push("Select them by hand", "bad"))}>
+                Copy the permission list
+              </button>
+              <span className="small muted mono" style={{ wordBreak: "break-all" }}>{META_SCOPES.replace(/,/g, "  ")}</span>
+            </div>
             <div className="fetch-row">
               <input className="input" type="password" value={meta} onChange={(e) => setMeta(e.target.value)} placeholder="Paste access token" autoComplete="off" />
               <span className="actions">
@@ -492,11 +505,20 @@ type IgState = { has_token: boolean; ig_user_id: string; ig_username: string; to
    because of it, so a missing permission is visible here instead of failing later. */
 const META_ABILITIES: { need: string[]; label: string; what: string }[] = [
   { need: ["instagram_basic", "pages_show_list"], label: "Read competitors' posts", what: "the Their Instagram box and the 7-day sync" },
-  { need: ["instagram_manage_insights"], label: "Read our own numbers", what: "reach, likes, saves on the Results page" },
-  { need: ["instagram_content_publish"], label: "Post to Instagram from here", what: "not built yet, and needs this permission" },
-  { need: ["instagram_manage_comments"], label: "Read and reply to comments", what: "not built yet, and needs this permission" },
+  { need: ["instagram_manage_insights"], label: "Read our own numbers", what: "reach, likes, saves against each post" },
+  { need: ["instagram_content_publish"], label: "Publish to Instagram from here", what: "the Publish button on the Posting page" },
+  { need: ["pages_manage_posts", "pages_show_list"], label: "Publish to the Facebook page", what: "the Publish button on the Posting page" },
+  { need: ["instagram_manage_comments"], label: "Read comments on our posts", what: "Listening fills itself instead of being pasted into" },
   { need: ["ads_read"], label: "Competitors' ads", what: "the Ad Library search" },
 ];
+
+/* Everything Circuit can use, in the order Meta lists them. Handed over as one line so nobody
+   has to find six checkboxes in a list of ninety. */
+export const META_SCOPES = [
+  "instagram_basic", "pages_show_list", "instagram_manage_insights",
+  "instagram_content_publish", "pages_manage_posts", "instagram_manage_comments",
+  "ads_read", "business_management",
+].join(",");
 
 function PermissionList({ scopes }: { scopes: string[] }) {
   if (!scopes.length) return null;
