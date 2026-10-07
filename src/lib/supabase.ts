@@ -81,6 +81,29 @@ export async function uploadPdf(name: string, bytes: Buffer): Promise<{ ok: bool
   }
 }
 
+/* Any file, put somewhere with a public address.
+
+   Instagram and Facebook will not take an image from this Mac: their publishing API asks for a
+   URL it can fetch for itself. Supabase is already holding the briefings, so it holds the
+   pictures that are about to be posted too — for as long as it takes Meta to collect them. */
+export async function uploadPublic(folder: string, name: string, bytes: Buffer, mime: string): Promise<{ ok: boolean; url: string; error: string }> {
+  if (!supabaseSettings().ready) return { ok: false, url: "", error: "Supabase isn't set up yet, so there is nowhere to put the picture where Meta can reach it" };
+  const bucket = sbBucket();
+  const objectPath = `${folder}/${name}`;
+  try {
+    const r = await fetch(`${sbUrl()}/storage/v1/object/${encodeURIComponent(bucket)}/${objectPath.split("/").map(encodeURIComponent).join("/")}`, {
+      method: "POST",
+      headers: headers({ "Content-Type": mime, "x-upsert": "true" }),
+      body: new Uint8Array(bytes),
+      signal: AbortSignal.timeout(120000),
+    });
+    if (!r.ok) return { ok: false, url: "", error: `Upload failed, HTTP ${r.status}: ${(await r.text()).slice(0, 200)}` };
+    return { ok: true, url: `${sbUrl()}/storage/v1/object/public/${bucket}/${objectPath.split("/").map(encodeURIComponent).join("/")}`, error: "" };
+  } catch (e) {
+    return { ok: false, url: "", error: (e as Error).message };
+  }
+}
+
 /* The briefing's own row, so the archive can be read without this Mac being on. */
 export async function upsertBriefing(row: { date: string; theme: string; items: number; summary: string; pdf_url: string; markdown: string }) {
   if (!supabaseSettings().ready) return { ok: false, error: "Supabase isn't set up yet" };

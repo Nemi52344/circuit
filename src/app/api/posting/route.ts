@@ -1,5 +1,6 @@
 import { getDb } from "@/lib/db";
 import { handle, ok, bad, readJson } from "@/lib/http";
+import { publishPost, publishable } from "@/lib/publish";
 
 export const runtime = "nodejs";
 
@@ -40,14 +41,22 @@ export const GET = handle(async (req) => {
     image_url: r.image_file_id ? `/api/files/${r.image_file_id}` : null,
     late: r.scheduled_at.slice(0, 10) < today,
   }));
-  return ok({ ready, late: ready.filter((r) => r.late).length, today });
+  return ok({ ready, late: ready.filter((r) => r.late).length, today, can: publishable() });
 });
 
 /* Recording that it went out. The live URL is the whole point: without it there is no evidence
    the post exists, and nothing to hang its numbers on later. */
 export const POST = handle(async (req) => {
-  const b = await readJson<{ id?: string; posted_url?: string; caption?: string }>(req);
+  const b = await readJson<{ action?: string; id?: string; posted_url?: string; caption?: string }>(req);
   if (!b.id) return bad("id required");
+
+  /* Publishing happens because a person pressed the button on this post. There is deliberately
+     no workflow node that does it unattended: it is public and it cannot be taken back. */
+  if (b.action === "publish") {
+    const r = await publishPost(b.id);
+    return r.ok ? ok(r) : bad(r.error, 400);
+  }
+
   const db = getDb();
   if (b.caption !== undefined) db.prepare("UPDATE posts SET caption = ?, updated_at = datetime('now') WHERE id = ?").run(b.caption, b.id);
   if (b.posted_url !== undefined) {

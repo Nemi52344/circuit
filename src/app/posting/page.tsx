@@ -14,7 +14,8 @@ import type { Ready } from "@/app/api/posting/route";
    take thirty seconds — the picture ready to save, the words ready to copy, and one box for the
    link afterwards, because a post with no link recorded may as well not have happened. */
 
-type Data = { ready: Ready[]; late: number; today: string };
+type Can = { platform: string; ready: boolean; missing: string[]; note: string };
+type Data = { ready: Ready[]; late: number; today: string; can: Can[] };
 
 const WHERE: Record<string, string> = {
   Instagram: "https://www.instagram.com/",
@@ -38,6 +39,18 @@ export default function PostingPage() {
   const copy = async (text: string, what: string) => {
     try { await navigator.clipboard.writeText(text); push(`${what} copied`, "ok"); }
     catch { push("Could not reach the clipboard — select it by hand", "bad"); }
+  };
+
+  /* Circuit publishes it itself, where Meta allows that. Confirmed first, because it is public
+     and there is no taking it back. */
+  const publish = async (r: Ready) => {
+    if (!confirm(`Publish this to ${r.platform} now?\n\n${r.caption.slice(0, 180)}${r.caption.length > 180 ? "…" : ""}`)) return;
+    setBusy(r.id);
+    try {
+      const out = await postJson<{ url: string }>("/api/posting", { action: "publish", id: r.id });
+      push(out.url ? `Live on ${r.platform}` : `Published to ${r.platform}`, "ok");
+      load();
+    } catch (e) { push((e as Error).message, "bad"); } finally { setBusy(""); }
   };
 
   const markPosted = async (r: Ready) => {
@@ -71,6 +84,19 @@ export default function PostingPage() {
         />
       </div>
 
+      <section className="panel stack" style={{ gap: 8 }}>
+        <div className="panel-head" style={{ marginBottom: 0 }}><h3>What Circuit can publish itself</h3></div>
+        <div className="list">
+          {(d.can || []).map((c) => (
+            <div key={c.platform} className="list-item" style={{ gridTemplateColumns: "auto 1fr auto" }}>
+              <div className={`dot ${c.ready ? "ok" : "warn"}`} />
+              <div><strong>{c.platform}</strong><p>{c.note}</p></div>
+              <Pill tone={c.ready ? "ok" : ""}>{c.ready ? "automatic" : "by hand"}</Pill>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {d.late ? (
         <p className="small" style={{ margin: 0, color: "#A6462F" }}>
           {d.late} {d.late === 1 ? "post is" : "posts are"} past their date.
@@ -101,7 +127,12 @@ export default function PostingPage() {
                 </label>
 
                 <div className="actions">
-                  <button className="btn small primary" type="button" onClick={() => copy(r.caption, "Caption")}>Copy the caption</button>
+                  {d.can?.find((c) => c.platform === r.platform)?.ready ? (
+                    <button className="btn small primary" type="button" disabled={busy === r.id} onClick={() => publish(r)}>
+                      {busy === r.id ? "Publishing…" : `Publish to ${r.platform}`}
+                    </button>
+                  ) : null}
+                  <button className="btn small" type="button" onClick={() => copy(r.caption, "Caption")}>Copy the caption</button>
                   {r.image_file_id ? (
                     <button className="btn small" type="button"
                       onClick={() => downloadUrl(fileUrl(r.image_file_id as string), `${r.platform}-${r.when.slice(0, 10)}.jpg`)}>Save the picture</button>
