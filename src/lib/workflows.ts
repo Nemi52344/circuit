@@ -22,7 +22,13 @@ export type Workflow = {
   id: string; name: string; purpose: string; steps: string; trigger: string; at_time: string;
   weekday: number | null; builtin: number; active: number; last_run_at: string | null; created_at: string; updated_at: string;
 };
-export type RunStep = { title: string; kind: StepKind | "branch"; status: "done" | "failed" | "waiting" | "skipped"; output?: unknown; error?: string; seconds?: number };
+export type RunStep = {
+  title: string; kind: StepKind | "branch"; status: "done" | "failed" | "waiting" | "skipped";
+  output?: unknown; error?: string; seconds?: number;
+  /* Which node on the board this was. Titles are what a person reads; this is what the machine
+     resumes from, because two nodes may legitimately share a name. */
+  node?: string;
+};
 export type Run = { id: string; workflow_id: string; status: string; steps: string; started_at: string; finished_at: string | null };
 
 export type ActionKey = "read_competitors" | "pull_our_numbers" | "look_at_posters" | "ask_for_ideas" | "back_up" | "take_briefing" | "daily_intel" | "email_intel" | "read_comments" | "draft_replies" | "check_website" | "posts_due";
@@ -202,19 +208,53 @@ export function deleteWorkflow(id: string) {
 /* Runs the steps in order. A "you" step stops the run and marks it waiting: Circuit will not
    pretend to have done something a person has to do. */
 export async function runWorkflow(id: string, input?: Record<string, unknown>): Promise<Run> {
-  const db = getDb();
   const wf = getWorkflow(id);
   if (!wf) throw new Error("Workflow not found");
-  const flow = toFlow(wf.steps);
-
   const runId = newId();
-  db.prepare("INSERT INTO workflow_runs (id, workflow_id, status, steps, started_at) VALUES (?, ?, 'running', '[]', ?)").run(runId, id, now());
-  const done: RunStep[] = [];
+  getDb().prepare("INSERT INTO workflow_runs (id, workflow_id, status, steps, started_at) VALUES (?, ?, 'running', '[]', ?)").run(runId, id, now());
+  return drive(runId, id, toFlow(wf.steps), null, [], input);
+}
+
+/* Picking a stopped run back up.
+
+   A workflow that stops at a step only a person can do used to mean starting the whole thing
+   again — reading the website twice, pulling the same numbers twice — just to get past the one
+   box somebody had since ticked. The run already knows where it stopped, so it carries on from
+   there with everything above it left alone. */
+export async function resumeWorkflow(runId: string, input?: Record<string, unknown>): Promise<Run> {
+  const db = getDb();
+  const run = db.prepare("SELECT * FROM workflow_runs WHERE id = ?").get(runId) as Run | undefined;
+  if (!run) throw new Error("That run is not here any more");
+  if (run.status !== "waiting") throw new Error("That run is not waiting on anything");
+  const wf = getWorkflow(run.workflow_id);
+  if (!wf) throw new Error("Workflow not found");
+
+  let already: RunStep[] = [];
+  try { already = JSON.parse(run.steps || "[]"); } catch { already = []; }
+  const stopped = already.find((x) => x.status === "waiting");
+  if (!stopped?.node) throw new Error("This run was recorded before Circuit kept track of where it stopped, so it has to be run again from the start");
+
+  /* The step a person has now done is marked done, and the run goes on from its node. */
+  const carried = already.map((x) => (x === stopped ? { ...x, status: "done" as const, output: "You did this and said so." } : x));
+  db.prepare("UPDATE workflow_runs SET status = 'running', steps = ?, finished_at = NULL WHERE id = ?").run(JSON.stringify(carried), runId);
+  return drive(runId, run.workflow_id, toFlow(wf.steps), stopped.node, carried, input);
+}
+
+/* One engine, whether a run is starting or carrying on. `from` is the node already dealt with,
+   so the walk begins at whatever that node points to; everything in `carried` is left alone. */
+async function drive(
+  runId: string, id: string, flow: ReturnType<typeof toFlow>,
+  from: string | null, carried: RunStep[], input?: Record<string, unknown>,
+): Promise<Run> {
+  const db = getDb();
+  const done: RunStep[] = [...carried];
   let status = "done";
 
   /* What the node before this one came back with — the only thing a branch gets to ask about.
      Keeping the question that narrow is what stops this becoming a scripting language. */
-  let last: { ok: boolean; waiting: boolean; output: unknown } = { ok: true, waiting: false, output: null };
+  const tail = carried[carried.length - 1];
+  let last: { ok: boolean; waiting: boolean; output: unknown } =
+    tail ? { ok: tail.status !== "failed", waiting: false, output: tail.output ?? null } : { ok: true, waiting: false, output: null };
   const answers = (test: BranchTest | undefined): "yes" | "no" => {
     if (test === "ok") return last.ok ? "yes" : "no";
     if (test === "waiting") return last.waiting ? "yes" : "no";
@@ -237,8 +277,17 @@ export async function runWorkflow(id: string, input?: Record<string, unknown>): 
      branch read an empty result and take the same line every time. */
   const byId = new Map(flow.nodes.map((n) => [n.id, n]));
   const startNode = flow.nodes.find((n) => n.kind === "trigger") || flow.nodes[0];
-  const queued: string[] = startNode ? [startNode.id] : [];
-  const visited = new Set<string>(startNode ? [startNode.id] : []);
+  /* Resuming: start from what the finished node points at, and treat everything already run as
+     visited so no step is done twice. Starting fresh: begin at the trigger. */
+  const visited = new Set<string>(carried.map((x) => x.node || "").filter(Boolean));
+  const queued: string[] = [];
+  if (from) {
+    visited.add(from);
+    for (const e of flow.edges.filter((x) => x.from === from)) if (!visited.has(e.to)) { visited.add(e.to); queued.push(e.to); }
+  } else if (startNode) {
+    visited.add(startNode.id);
+    queued.push(startNode.id);
+  }
 
   while (queued.length) {
     const nodeId = queued.shift() as string;
@@ -259,7 +308,7 @@ export async function runWorkflow(id: string, input?: Record<string, unknown>): 
     if (step.kind === "branch") {
       const way = answers(step.test);
       const t = BRANCH_TESTS.find((b) => b.key === (step.test || "found"));
-      done.push({ title: step.title || t?.label || "Branch", kind: "branch", status: "done", output: way === "yes" ? t?.yes : t?.no });
+      done.push({ node: nodeId, title: step.title || t?.label || "Branch", kind: "branch", status: "done", output: way === "yes" ? t?.yes : t?.no });
       db.prepare("UPDATE workflow_runs SET steps = ? WHERE id = ?").run(JSON.stringify(done), runId);
       follow(way);
       continue;
@@ -269,31 +318,31 @@ export async function runWorkflow(id: string, input?: Record<string, unknown>): 
       const asksForText = /paste|upload|attach/i.test(step.title);
       const given = typeof input?.pasted_text === "string" && input.pasted_text.trim().length > 0;
       if (asksForText && given) {
-        done.push({ title: step.title, kind: "you", status: "done", output: `You gave ${String(input!.pasted_text).length} characters of text.` });
+        done.push({ node: nodeId, title: step.title, kind: "you", status: "done", output: `You gave ${String(input!.pasted_text).length} characters of text.` });
         last = { ok: true, waiting: false, output: input!.pasted_text };
         follow();
         continue;
       }
-      done.push({ title: step.title, kind: "you", status: "waiting", output: step.note || "" });
+      done.push({ node: nodeId, title: step.title, kind: "you", status: "waiting", output: step.note || "" });
       last = { ok: true, waiting: true, output: null };
       status = "waiting";
       break;
     }
     if (step.kind === "action" && step.action) {
       const r = await runAction(step.action);
-      done.push({ title: step.title, kind: "action", status: r.ok ? "done" : "failed", output: r.output, error: r.error });
+      done.push({ node: nodeId, title: step.title, kind: "action", status: r.ok ? "done" : "failed", output: r.output, error: r.error });
       last = { ok: r.ok, waiting: false, output: r.output };
       if (!r.ok) status = "failed";
     }
     if (step.kind === "agent" && step.agent_id) {
       const agent = getAgent(step.agent_id);
       if (!agent) {
-        done.push({ title: step.title, kind: "agent", status: "failed", error: "That agent has been deleted" });
+        done.push({ node: nodeId, title: step.title, kind: "agent", status: "failed", error: "That agent has been deleted" });
         last = { ok: false, waiting: false, output: null };
         status = "failed";
       } else {
         const r = await runAgent(agent, input);
-        done.push({ title: step.title || agent.name, kind: "agent", status: r.ok ? "done" : "failed", output: r.answer, error: r.error, seconds: r.seconds });
+        done.push({ node: nodeId, title: step.title || agent.name, kind: "agent", status: r.ok ? "done" : "failed", output: r.answer, error: r.error, seconds: r.seconds });
         last = { ok: r.ok, waiting: false, output: r.answer };
         if (!r.ok) status = "failed";
       }

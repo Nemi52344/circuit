@@ -88,6 +88,22 @@ export default function WorkflowsPage() {
     } finally { setRunning(""); }
   };
 
+  /* The step a person had to do is done; pick the run up from there rather than starting the
+     whole workflow again. */
+  const carryOn = async (r: Run) => {
+    setRunning(r.id);
+    try {
+      const out = await postJson<Run>("/api/workflows", { action: "resume", run_id: r.id });
+      const steps = JSON.parse(out.steps || "[]") as RunStep[];
+      const failed = steps.filter((s) => s.status === "failed").length;
+      push(out.status === "waiting" ? "Stopped at the next step that needs you"
+        : failed ? `${failed} step${failed === 1 ? "" : "s"} failed`
+        : "Finished", out.status === "done" ? "ok" : failed ? "bad" : "");
+      setLastRun(out);
+      load();
+    } catch (e) { push((e as Error).message, "bad"); } finally { setRunning(""); }
+  };
+
   const start = (w: Workflow) => {
     const f = toFlow(w.steps);
     const first = f.nodes.find((n) => n.kind === "you");
@@ -272,8 +288,17 @@ export default function WorkflowsPage() {
               return (
                 <div key={r.id} className="list-item" style={{ cursor: "pointer" }} onClick={() => setOpenRun(r)}>
                   <div className={`dot ${r.status === "done" ? "ok" : r.status === "waiting" ? "warn" : "bad"}`} />
-                  <div><strong>{r.name}</strong><p>{fmtDate(r.started_at)} · {steps.filter((s) => s.status === "done").length} of {steps.length} steps done</p></div>
-                  <span className="btn small ghost">See what happened</span>
+                  <div><strong>{r.name}</strong><p>{fmtDate(r.started_at)} · {steps.filter((s) => s.status === "done").length} of {steps.length} steps done
+                    {r.status === "waiting" ? <> · waiting on “{steps.find((s) => s.status === "waiting")?.title}”</> : null}</p></div>
+                  <span className="actions">
+                    {r.status === "waiting" ? (
+                      <button className="btn small primary" type="button" disabled={Boolean(running)}
+                        onClick={(e) => { e.stopPropagation(); carryOn(r); }}>
+                        {running === r.id ? "Carrying on…" : "I have done it"}
+                      </button>
+                    ) : null}
+                    <span className="btn small ghost">See what happened</span>
+                  </span>
                 </div>
               );
             })}

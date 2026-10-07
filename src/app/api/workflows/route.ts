@@ -1,5 +1,5 @@
 import { handle, ok, bad, readJson } from "@/lib/http";
-import { listWorkflows, saveWorkflow, deleteWorkflow, runWorkflow, recentRuns, runsFor, seedWorkflows, ACTIONS, type Step } from "@/lib/workflows";
+import { listWorkflows, saveWorkflow, deleteWorkflow, runWorkflow, resumeWorkflow, recentRuns, runsFor, seedWorkflows, ACTIONS, type Step } from "@/lib/workflows";
 import { BRANCH_TESTS, type Flow } from "@/lib/flow";
 import { listAgents } from "@/lib/agents";
 
@@ -14,10 +14,15 @@ export const GET = handle(async (req) => {
 });
 
 export const POST = handle(async (req) => {
-  const b = await readJson<{ action?: string; id?: string; name?: string; purpose?: string; steps?: Step[] | Flow; trigger?: string; at_time?: string; weekday?: number | null; active?: number; input?: Record<string, unknown> }>(req);
+  const b = await readJson<{ action?: string; id?: string; run_id?: string; name?: string; purpose?: string; steps?: Step[] | Flow; trigger?: string; at_time?: string; weekday?: number | null; active?: number; input?: Record<string, unknown> }>(req);
   if (b.action === "run") {
     if (!b.id) return bad("id required");
     return ok(await runWorkflow(b.id, b.input));
+  }
+  /* Carrying on a run that stopped at a step only a person could do. */
+  if (b.action === "resume") {
+    if (!b.run_id) return bad("run_id required");
+    return ok(await resumeWorkflow(b.run_id, b.input));
   }
   if (!b.name?.trim()) return bad("Give the workflow a name");
   /* The shape a workflow is saved in is whatever the page sent — a list from the old editor, a
