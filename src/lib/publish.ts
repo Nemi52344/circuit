@@ -90,10 +90,33 @@ async function page(): Promise<{ id: string; token: string; name: string }> {
   const r = await fetch(`${GRAPH}/me/accounts?fields=id,name,access_token&access_token=${token}`, { signal: AbortSignal.timeout(60000) });
   const j = (await r.json()) as { data?: { id: string; name: string; access_token: string }[]; error?: { message: string } };
   if (j.error) throw new Error(j.error.message);
+  const pages = j.data || [];
+  if (!pages.length) throw new Error("This token does not reach any Facebook page");
+  const names = () => pages.map((p) => `${p.name} (${p.id})`).join(", ");
+
+  /* Never fall back to "the first page". A Meta account commonly administers several pages —
+     this one reaches five across three different companies — and the first one the API happens
+     to return is not the brand's. Publishing is public and cannot be taken back, so an
+     unanswerable question has to stop the post, not pick for itself. */
   const want = getSetting("fb_page_id");
-  const found = (j.data || []).find((p) => !want || p.id === want) || (j.data || [])[0];
-  if (!found) throw new Error("This token does not reach any Facebook page");
-  return { id: found.id, token: found.access_token, name: found.name };
+  if (want) {
+    const pinned = pages.find((p) => p.id === want);
+    if (!pinned) throw new Error(`The Facebook page set in Settings (${want}) is not on this token. It reaches: ${names()}`);
+    return { id: pinned.id, token: pinned.access_token, name: pinned.name };
+  }
+
+  /* Nothing pinned: the page that owns the Instagram account Circuit already posts to is the
+     only defensible answer, because it is the same brand by definition. */
+  const ig = getSetting("ig_user_id");
+  if (ig) {
+    const linked = await fetch(`${GRAPH}/me/accounts?fields=id,instagram_business_account{id}&access_token=${token}`, { signal: AbortSignal.timeout(60000) })
+      .then((x) => x.json() as Promise<{ data?: { id: string; instagram_business_account?: { id: string } }[] }>)
+      .catch(() => ({ data: [] as { id: string; instagram_business_account?: { id: string } }[] }));
+    const match = (linked.data || []).find((p) => p.instagram_business_account?.id === ig);
+    const owner = match && pages.find((p) => p.id === match.id);
+    if (owner) return { id: owner.id, token: owner.access_token, name: owner.name };
+  }
+  throw new Error(`Set which Facebook page to post to — this token reaches: ${names()}`);
 }
 
 export type Published = { ok: boolean; url: string; error: string; platform: string };
