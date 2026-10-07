@@ -7,7 +7,7 @@ import { getCompetitors } from "@/lib/sources";
    a Claude session drains, which reads these signals, searches further and writes the analysis
    and angle options back through /api/research/deliver. No API keys anywhere. */
 
-const UA = "Circuit/1.0 (local marketing workspace; contact info@boommotors.com)";
+const UA = "Circuit/1.0 (local marketing workspace; contact: the owner of this install)";
 export type Signal = { title: string; link: string; source: string; date: string; note?: string };
 export type Signals = { gathered_at: string; query: string; topic_news: Signal[]; competitor_news: Signal[]; reddit: Signal[]; trends: Signal[]; searches: Signal[]; errors: string[] };
 

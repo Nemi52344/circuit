@@ -475,7 +475,7 @@ function ApproversPanel({ push }: { push: (t: string, tone?: string) => void }) 
       <div className="form-grid">
         <label className="field"><span>Name</span><input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Priya" /></label>
         <label className="field"><span>Role</span><input className="input" value={role} onChange={(e) => setRole(e.target.value)} placeholder="Founder, Marketing lead, Legal" /></label>
-        <label className="field"><span>Email <em>optional, for sending the link</em></span><input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="priya@bncmotors.in" /></label>
+        <label className="field"><span>Email <em>optional, for sending the link</em></span><input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@yourcompany.com" /></label>
         <label className="switch" style={{ alignSelf: "end", paddingBottom: 10 }}><input type="checkbox" checked={required} onChange={(e) => setRequired(e.target.checked)} /><span>Must approve</span></label>
       </div>
       <div className="actions"><button className="btn" type="button" disabled={!name.trim()} onClick={add}>Add approver</button></div>

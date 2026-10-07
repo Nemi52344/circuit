@@ -114,7 +114,7 @@ export function MailPanel({ push }: { push: (t: string, tone?: string) => void }
       </div>
       <p className="small muted" style={{ margin: 0 }}>
         Circuit has no mail server and holds no mail password. It posts the message to one Zapier hook,
-        and Zapier sends it from marketing@bncmotors.in through Outlook — the connection you already have —
+        and Zapier sends it from marketing@yourcompany.com through Outlook — the connection you already have —
         so you can see, pause or change it in Zapier at any time.
       </p>
 
@@ -128,8 +128,8 @@ export function MailPanel({ push }: { push: (t: string, tone?: string) => void }
         <label className="field"><span>Directory (tenant) ID</span><input className="input" id="ms-tenant" defaultValue={s.graph?.tenant || ""} placeholder="contoso.onmicrosoft.com or the GUID" autoComplete="off" /></label>
         <label className="field"><span>Application (client) ID</span><input className="input" id="ms-client" defaultValue={s.graph?.client_id || ""} autoComplete="off" /></label>
         <label className="field"><span>Client secret</span><input className="input" id="ms-secret" type="password" placeholder={s.graph?.has_secret ? "saved" : ""} autoComplete="off" /></label>
-        <label className="field"><span>Send from</span><input className="input" id="ms-from" defaultValue={s.graph?.from || ""} placeholder="marketing@bncmotors.in" autoComplete="off" /></label>
-        <label className="field full"><span>Send to</span><input className="input" id="ms-to" defaultValue={s.graph?.to || ""} placeholder="prasanth.r@bncmotors.in" autoComplete="off" /></label>
+        <label className="field"><span>Send from</span><input className="input" id="ms-from" defaultValue={s.graph?.from || ""} placeholder="marketing@yourcompany.com" autoComplete="off" /></label>
+        <label className="field full"><span>Send to</span><input className="input" id="ms-to" defaultValue={s.graph?.to || ""} placeholder="you@yourcompany.com" autoComplete="off" /></label>
       </div>
       <div className="actions">
         <button className="btn primary" type="button" disabled={Boolean(busy)} onClick={saveGraph}>{busy === "graph" ? "Saving…" : "Save Microsoft 365"}</button>
@@ -139,7 +139,7 @@ export function MailPanel({ push }: { push: (t: string, tone?: string) => void }
       <div className="note small" style={{ marginTop: 6 }}>
         <strong>Or the Zapier hook, for words only</strong>
         In Zapier: new Zap → trigger <em>Webhooks by Zapier · Catch Hook</em> → action <em>Microsoft Outlook · Send Email</em>,
-        on the marketing@bncmotors.in connection. Map <code>to</code>, <code>subject</code> and <code>body</code> from the hook
+        on the marketing@yourcompany.com connection. Map <code>to</code>, <code>subject</code> and <code>body</code> from the hook
         onto the email. Copy the hook URL Zapier gives you into the box below.
       </div>
 
@@ -148,7 +148,7 @@ export function MailPanel({ push }: { push: (t: string, tone?: string) => void }
           <input className="input" id="mail-hook" defaultValue={s.hook} placeholder="https://hooks.zapier.com/hooks/catch/…" autoComplete="off" />
         </label>
         <label className="field full"><span>Send to</span>
-          <input className="input" id="mail-to" defaultValue={s.to} placeholder="marketing@bncmotors.in" autoComplete="off" />
+          <input className="input" id="mail-to" defaultValue={s.to} placeholder="marketing@yourcompany.com" autoComplete="off" />
         </label>
       </div>
       <div className="actions">

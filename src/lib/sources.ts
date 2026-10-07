@@ -32,7 +32,7 @@ export type ImportItem = {
 };
 
 const BROWSER_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
-const FEED_UA = "Circuit/1.0 (local marketing workspace; contact info@boommotors.com)";
+const FEED_UA = "Circuit/1.0 (local marketing workspace; contact: the owner of this install)";
 export const DEFAULT_RIGHTS = "Third-party. Reference only, do not publish.";
 const IMAGE_EXT = /\.(jpe?g|png|webp|gif|avif)$/i;
 

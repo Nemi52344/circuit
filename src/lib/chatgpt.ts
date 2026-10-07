@@ -12,14 +12,39 @@ const run = promisify(execFile);
    no file writes, nothing saved as a session. */
 
 const CANDIDATES = [
+  "/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex",
   "/Applications/ChatGPT.app/Contents/Resources/codex",
   path.join(os.homedir(), ".local/bin/codex"),
   "/opt/homebrew/bin/codex",
   "/usr/local/bin/codex",
 ];
 
+/* The ChatGPT app has moved this binary once already — an update shifted it from
+   Resources/codex to Resources/codex-cli/bin/codex, and every drafted caption, researched
+   topic and swept briefing stopped working until somebody noticed. So rather than trusting a
+   list of paths to stay true, the app bundle is searched a couple of levels deep as a last
+   resort. The known paths are still tried first because they cost nothing. */
+function huntInsideApp(): string | null {
+  const roots = ["/Applications/ChatGPT.app/Contents/Resources"];
+  for (const root of roots) {
+    if (!fs.existsSync(root)) continue;
+    const stack: { dir: string; depth: number }[] = [{ dir: root, depth: 0 }];
+    while (stack.length) {
+      const { dir, depth } = stack.pop() as { dir: string; depth: number };
+      let entries: fs.Dirent[] = [];
+      try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { continue; }
+      for (const e of entries) {
+        const full = path.join(dir, e.name);
+        if (e.isFile() && e.name === "codex") return full;
+        if (e.isDirectory() && depth < 3) stack.push({ dir: full, depth: depth + 1 });
+      }
+    }
+  }
+  return null;
+}
+
 export function codexPath(): string | null {
-  return CANDIDATES.find((p) => fs.existsSync(p)) ?? null;
+  return CANDIDATES.find((p) => fs.existsSync(p)) ?? huntInsideApp();
 }
 
 export type ChatGptStatus = { installed: boolean; path: string | null; version: string; logged_in: boolean; detail: string };

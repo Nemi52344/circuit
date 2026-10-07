@@ -27,3 +27,8 @@ data/sources/*
 
 # Build artefacts
 tsconfig.tsbuildinfo
+
+# BNC's full product requirements — strategy, competitor thinking, the lot.
+# Kept out of a public repo; the app reads the local copy, which stays on this Mac.
+docs/PRD.html
+public/PRD.html

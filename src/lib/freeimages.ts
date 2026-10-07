@@ -25,7 +25,7 @@ function small(url: string, px = 500) {
   return `https://upload.wikimedia.org/wikipedia/${m[1]}/thumb/${m[2]}/${m[3]}/${m[4]}/${px}px-${m[4]}`;
 }
 
-const UA = "Circuit/1.0 (local marketing workspace; contact info@boommotors.com)";
+const UA = "Circuit/1.0 (local marketing workspace; contact: the owner of this install)";
 
 /* CC0 and public domain need nothing; BY and BY-SA need a credit line; anything with NC or ND
    is not safe for a brand post, so it is marked to check rather than quietly offered. */
