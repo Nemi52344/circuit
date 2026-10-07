@@ -271,3 +271,50 @@ export function financeSummary() {
     opex_lines: listOpex().filter((o) => activeIn(thisMonth(), o.starts_on, o.ends_on)).length,
   };
 }
+
+/* ---- what marketing costs ---- */
+
+/* The P&L above is a company's shape: revenue, cost of sales, margin. Marketing has none of
+   those — it does not sell anything, so it has no revenue of its own and a margin would be a
+   fiction. What it has is two salaries and a pile of AI subscriptions, and the only question
+   worth asking is what that money bought.
+
+   So this is the whole of it: the people on the team that month, every tool bill dated in that
+   month, and the posts that actually went out. Not the posts that were planned — planned work
+   costs the same as finished work and tells you nothing. */
+
+export type MarketingMonth = {
+  month: string;
+  people: number; heads: number;
+  tools: number; tool_lines: number;
+  total: number;
+  posted: number; planned: number;
+  per_post: number | null;
+};
+
+export function marketingRange(months: string[]): MarketingMonth[] {
+  const db = getDb();
+  const people = listPeople();
+  const bills = listBills();
+  const posts = db.prepare("SELECT status, substr(scheduled_at, 1, 7) AS m FROM posts").all() as { status: string; m: string }[];
+
+  return months.map((month) => {
+    const on = people.filter((p) => activeIn(month, p.started_on, p.ended_on));
+    const inMonth = bills.filter((b) => b.bill_date.slice(0, 7) === month);
+    const mine = posts.filter((p) => p.m === month);
+
+    const peopleCost = on.reduce((a, p) => a + p.monthly_cost, 0);
+    const tools = inMonth.reduce((a, b) => a + b.amount + b.tax, 0);
+    const total = peopleCost + tools;
+    const posted = mine.filter((p) => p.status === "posted").length;
+
+    return {
+      month, people: peopleCost, heads: on.length,
+      tools, tool_lines: inMonth.length, total,
+      posted, planned: mine.length,
+      /* No division when nothing went out. A blank says "nothing shipped this month", which is
+         the thing worth noticing; a huge number would say the same thing far less clearly. */
+      per_post: posted > 0 ? Math.round(total / posted) : null,
+    };
+  });
+}

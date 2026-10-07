@@ -1,7 +1,7 @@
 import { handle, ok, bad, readJson } from "@/lib/http";
 import {
   listPeople, savePerson, listOpex, saveOpex, savePnl, pnlRange, remove,
-  financeSummary, OPEX_CATEGORIES, type Person, type Opex, type PnlRow,
+  financeSummary, marketingRange, OPEX_CATEGORIES, type Person, type Opex, type PnlRow,
 } from "@/lib/books";
 import { monthsBack } from "@/lib/money";
 
@@ -9,9 +9,10 @@ export const runtime = "nodejs";
 
 export const GET = handle(async (req) => {
   const n = Number(new URL(req.url).searchParams.get("months") || 12);
+  const span = monthsBack(Math.min(Math.max(n, 3), 36));
   return ok({
     people: listPeople(), opex: listOpex(),
-    pnl: pnlRange(monthsBack(Math.min(Math.max(n, 3), 36))),
+    pnl: pnlRange(span), marketing: marketingRange(span),
     summary: financeSummary(), categories: OPEX_CATEGORIES,
   });
 });

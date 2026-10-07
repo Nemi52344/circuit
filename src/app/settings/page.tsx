@@ -6,6 +6,7 @@ import { HealthPanel } from "@/components/Health";
 import { PublishingPanel } from "@/components/Publishing";
 import { MailPanel } from "@/components/Mail";
 import type { Brand } from "@/lib/types";
+import { META_SCOPES } from "@/lib/types";
 
 type ClaudeStatus = { installed: boolean; cli_path: string | null; version: string; logged_in: boolean; auth_method: string; higgsfield: boolean; mcp_detail: string; ready: boolean };
 
@@ -511,14 +512,6 @@ const META_ABILITIES: { need: string[]; label: string; what: string }[] = [
   { need: ["instagram_manage_comments"], label: "Read comments on our posts", what: "Listening fills itself instead of being pasted into" },
   { need: ["ads_read"], label: "Competitors' ads", what: "the Ad Library search" },
 ];
-
-/* Everything Circuit can use, in the order Meta lists them. Handed over as one line so nobody
-   has to find six checkboxes in a list of ninety. */
-export const META_SCOPES = [
-  "instagram_basic", "pages_show_list", "instagram_manage_insights",
-  "instagram_content_publish", "pages_manage_posts", "instagram_manage_comments",
-  "ads_read", "business_management",
-].join(",");
 
 function PermissionList({ scopes }: { scopes: string[] }) {
   if (!scopes.length) return null;

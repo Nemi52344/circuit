@@ -4,7 +4,7 @@ import { api, postJson } from "@/lib/api";
 import { Empty, useToast } from "@/components/ui";
 import { Kpi, Tabs, Cell, MoneyCell, Delta } from "@/components/Sheet";
 import { money, moneyShort, monthLabel } from "@/lib/money";
-import type { Person, Opex } from "@/lib/books";
+import type { Person, Opex, MarketingMonth } from "@/lib/books";
 import type { PnlMonth } from "@/lib/books";
 
 /* Finance: what the month costs to run, and what it left behind.
@@ -17,14 +17,14 @@ import type { PnlMonth } from "@/lib/books";
    per month in a way no list can work out. */
 
 type Data = {
-  people: Person[]; opex: Opex[]; pnl: PnlMonth[];
+  people: Person[]; opex: Opex[]; pnl: PnlMonth[]; marketing: MarketingMonth[];
   summary: { month: PnlMonth; previous: PnlMonth; headcount: number; payroll: number; contract: number; opex_lines: number };
   categories: string[];
 };
 
 export default function FinancePage() {
   const [d, setD] = useState<Data | null>(null);
-  const [tab, setTab] = useState("pnl");
+  const [tab, setTab] = useState("cost");
   const [months, setMonths] = useState(12);
   const [busy, setBusy] = useState(false);
   const { push, view } = useToast();
@@ -51,6 +51,9 @@ export default function FinancePage() {
   const cur = s.month;
   const prev = s.previous;
   const rows = [...d.pnl].reverse();
+  const mk = d.marketing[d.marketing.length - 1];
+  const spend = [...d.marketing].reverse();
+  const topSpend = Math.max(1, ...d.marketing.map((m) => m.total));
   const peak = Math.max(1, ...d.pnl.map((p) => Math.abs(p.net)));
 
   return (
@@ -60,8 +63,8 @@ export default function FinancePage() {
         <div>
           <h2>Finance</h2>
           <p className="lede">
-            People and standing costs are entered once with a start and an end; each month adds up whatever was running then.
-            Only revenue and cost of sales are typed month by month.
+            Marketing does not sell anything, so it has no revenue of its own. What it has is two salaries and a pile of
+            AI subscriptions — so the month is those two numbers, and what they bought.
           </p>
         </div>
         <span className="actions">
@@ -72,22 +75,71 @@ export default function FinancePage() {
       </div>
 
       <div className="grid-cards">
-        <Kpi label={`Revenue · ${monthLabel(cur.month)}`} value={moneyShort(cur.revenue)} hint="Typed into the P&L below" />
-        <Kpi label="Running cost" value={moneyShort(cur.costs)} hint={`${money(cur.manpower)} people · ${money(cur.opex)} opex`} />
-        {/* An untouched month is not a good month — only a real surplus earns the accent. */}
-        <Kpi label="Net" value={moneyShort(cur.net)} tone={cur.net > 0 ? "deep" : cur.net < 0 ? "graphite" : ""}
-          hint={cur.margin === null ? "No revenue entered yet" : `${cur.margin}% of revenue`} />
-        <Kpi label="Headcount" value={String(s.headcount)} hint={`${s.payroll} on payroll · ${s.contract} contract`} />
+        <Kpi label={`Marketing · ${monthLabel(mk.month)}`} value={moneyShort(mk.total)} tone="deep"
+          hint={`${money(mk.people)} people · ${money(mk.tools)} tools`} />
+        <Kpi label="People" value={moneyShort(mk.people)} hint={`${mk.heads} on the team`} />
+        <Kpi label="AI tools" value={moneyShort(mk.tools)}
+          hint={mk.tool_lines ? `${mk.tool_lines} charge${mk.tool_lines === 1 ? "" : "s"} this month` : "No statement loaded yet"} />
+        {/* Cost per post only means something once something has gone out. Until then the honest
+            thing to show is the backlog, not a number divided by nothing. */}
+        <Kpi label="Cost per post" value={mk.per_post === null ? "—" : moneyShort(mk.per_post)}
+          hint={mk.per_post === null ? `Nothing published yet · ${mk.planned} waiting` : `${mk.posted} published`} />
       </div>
 
       <Tabs
         tabs={[
+          { key: "cost", label: "What marketing costs", count: d.marketing.filter((m) => m.total).length },
           { key: "pnl", label: "P&L month on month", count: d.pnl.filter((p) => p.revenue || p.costs).length },
           { key: "people", label: "Manpower", count: d.people.length },
           { key: "opex", label: "Opex", count: d.opex.length },
         ]}
         active={tab} onPick={setTab}
       />
+
+      {tab === "cost" ? (
+        <section className="panel stack">
+          <div className="panel-head" style={{ marginBottom: 0 }}>
+            <h3>What marketing costs</h3>
+            <span className="small muted">Latest first</span>
+          </div>
+          <p className="small muted" style={{ margin: 0 }}>
+            Salaries come from the Manpower list; tools are the card charges read off the monthly statement, so a month
+            with no statement loaded shows no tools rather than a guess. Cost per post divides by what actually went out —
+            planned work costs the same as finished work and proves nothing.
+          </p>
+          <div className="table-wrap">
+            <table className="data">
+              <thead><tr>
+                <th>Month</th>
+                <th className="num">People</th><th className="num">AI tools</th><th className="num">Total</th>
+                <th className="num">Published</th><th className="num">Waiting</th><th className="num">Cost per post</th>
+              </tr></thead>
+              <tbody>
+                {spend.map((m) => (
+                  <tr key={m.month}>
+                    <td className="strong">{monthLabel(m.month)}</td>
+                    <td className="num muted">{m.people ? money(m.people) : "—"}</td>
+                    <td className="num muted">{m.tools ? money(m.tools) : "—"}</td>
+                    <td className="num strong">{m.total ? money(m.total) : "—"}</td>
+                    <td className="num">{m.posted || "—"}</td>
+                    <td className="num muted">{m.planned - m.posted || "—"}</td>
+                    <td className="num">{m.per_post === null ? <span className="muted">—</span> : money(m.per_post)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div>
+            <div className="eyebrow" style={{ marginBottom: 6 }}>Monthly spend, oldest to newest</div>
+            <div className="mom">
+              {d.marketing.map((m) => (
+                <i key={m.month} style={{ height: `${Math.max(2, (m.total / topSpend) * 100)}%` }}
+                  title={`${monthLabel(m.month)} · ${money(m.total)}`} />
+              ))}
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       {tab === "pnl" ? (
         <section className="panel stack">

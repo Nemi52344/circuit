@@ -26,3 +26,15 @@ export type FileRow = {
   title?: string; tags?: string; brand?: number;
 };
 export type Brand = { name: string; tagline: string; tone: string; colors: string; claims: string; audience: string; website: string };
+
+/* Every Meta permission Circuit can use, in the order Meta lists them — handed over as one line
+   so nobody has to find eight checkboxes in a list of ninety.
+
+   It lives here, among the types, rather than next to the Meta code: lib/meta.ts reaches the
+   database, and the Settings page is a client component, so importing that module to read one
+   string would pull better-sqlite3 into the browser bundle and fail the build. */
+export const META_SCOPES = [
+  "instagram_basic", "pages_show_list", "instagram_manage_insights",
+  "instagram_content_publish", "pages_manage_posts", "instagram_manage_comments",
+  "ads_read", "business_management",
+].join(",");
