@@ -5,6 +5,7 @@ export const NAV: NavItem[] = [
   { href: "/slots", label: "All posts", group: "Plan", icon: "wall" },
   { href: "/posting", label: "Posting", group: "Plan", icon: "wall" },
   { href: "/signoff", label: "Sign-off", group: "Plan", icon: "spark" },
+  { href: "/poster", label: "Poster studio", group: "Plan", icon: "wall" },
   { href: "/workflows", label: "Workflows", group: "Plan", icon: "flow" },
   { href: "/inspiration", label: "Inspiration", group: "Collect", icon: "eye" },
   { href: "/intel", label: "Daily intel", group: "Plan", icon: "doc" },
