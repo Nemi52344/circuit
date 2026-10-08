@@ -1,6 +1,7 @@
 "use client";
 import { usePathname } from "next/navigation";
 import { activeNav } from "@/lib/nav";
+import { useMe, SignOutButton } from "@/components/Gate";
 
 function toggleTheme() {
   const cur = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
@@ -14,6 +15,7 @@ function toggleTheme() {
 }
 
 export default function Topbar() {
+  const { me } = useMe();
   const path = usePathname();
   // approvers opening a review link see the post only, not the workspace
   if (path?.startsWith("/review/")) return null;
@@ -37,13 +39,19 @@ export default function Topbar() {
             <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M3 13l1.4-1.4M11.6 4.4L13 3" />
           </svg>
         </button>
-        <div className="user-chip" title="Product owner">
-          <div className="avatar">P</div>
-          <div className="user-meta">
-            <div className="un">Prashanth</div>
-            <div className="ur">Marketing</div>
+        {/* Who is actually signed in, rather than a name baked into the page. The role is here
+            because it decides whether the Sign-off buttons appear, and a person who cannot
+            approve should be able to see why without hunting for it. */}
+        {me ? (
+          <div className="user-chip" title={me.email}>
+            <div className="avatar">{(me.name || me.email).slice(0, 1).toUpperCase()}</div>
+            <div className="user-meta">
+              <div className="un">{me.name}</div>
+              <div className="ur">{me.role === "admin" ? "Admin" : "Marketing"}</div>
+            </div>
+            <SignOutButton />
           </div>
-        </div>
+        ) : null}
       </div>
     </header>
   );

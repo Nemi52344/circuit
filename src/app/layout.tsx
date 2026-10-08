@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import Nav from "@/components/Nav";
 import Topbar from "@/components/Topbar";
+import { Gate } from "@/components/Gate";
 
 export const metadata: Metadata = {
   title: "Circuit",
@@ -21,6 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
       </head>
       <body>
+        <Gate>
         <div className="shell">
           <Nav />
           <div className="main">
@@ -34,6 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </main>
           </div>
         </div>
+        </Gate>
       </body>
     </html>
   );

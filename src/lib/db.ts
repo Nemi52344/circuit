@@ -11,6 +11,32 @@ CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  email TEXT NOT NULL UNIQUE,
+  role TEXT NOT NULL DEFAULT 'marketing',
+  pass_salt TEXT NOT NULL,
+  pass_hash TEXT NOT NULL,
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS sessions (
+  token_hash TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+CREATE TABLE IF NOT EXISTS signoffs (
+  post_id TEXT PRIMARY KEY,
+  decision TEXT NOT NULL,
+  by_user TEXT NOT NULL,
+  by_name TEXT NOT NULL,
+  note TEXT NOT NULL DEFAULT '',
+  caption_hash TEXT NOT NULL,
+  decided_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS files (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,

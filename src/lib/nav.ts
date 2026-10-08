@@ -4,6 +4,7 @@ export const NAV: NavItem[] = [
   { href: "/", label: "Calendar", group: "Plan", icon: "calendar" },
   { href: "/slots", label: "All posts", group: "Plan", icon: "wall" },
   { href: "/posting", label: "Posting", group: "Plan", icon: "wall" },
+  { href: "/signoff", label: "Sign-off", group: "Plan", icon: "spark" },
   { href: "/workflows", label: "Workflows", group: "Plan", icon: "flow" },
   { href: "/inspiration", label: "Inspiration", group: "Collect", icon: "eye" },
   { href: "/intel", label: "Daily intel", group: "Plan", icon: "doc" },
@@ -16,6 +17,7 @@ export const NAV: NavItem[] = [
   { href: "/finance", label: "Finance", group: "Run", icon: "chart" },
   { href: "/reports", label: "Reports", group: "Run", icon: "grid" },
   { href: "/build", label: "What to build", group: "Manage", icon: "grid" },
+  { href: "/people", label: "People", group: "Manage", icon: "grid" },
   { href: "/settings", label: "Settings", group: "Manage", icon: "gear" },
 ];
 

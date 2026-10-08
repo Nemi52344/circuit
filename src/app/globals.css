@@ -1790,3 +1790,17 @@ table.data tr.total td { background: rgba(242, 243, 241, .9); border-top-color: 
 .post-out.late { box-shadow: var(--shadow), inset 3px 0 0 #C2603F; }
 .po-done { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
 @media (max-width: 760px) { .post-out { grid-template-columns: 1fr; } .po-pic { aspect-ratio: 16 / 10; } }
+
+/* ---- the door ---- */
+/* Sign-in stands on its own: no nav, no topbar, nothing to look at but the one thing to do. */
+.gate { min-height: 100dvh; display: grid; place-items: center; padding: 24px; background: var(--bg); }
+.gate-card { width: 100%; max-width: 380px; }
+.gate-card .field { display: grid; gap: 6px; }
+
+/* ---- sign-off ---- */
+/* The caption at reading size beside its picture. An approval given to a truncated line is not
+   an approval, so nothing here clamps. */
+.signoff-body { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 16px; align-items: start; }
+.signoff-img { width: 140px; border-radius: 12px; display: block; }
+.signoff-caption { margin: 0; white-space: pre-wrap; line-height: 1.55; }
+@media (max-width: 640px) { .signoff-body { grid-template-columns: 1fr; } .signoff-img { width: 100%; max-width: 240px; } }

@@ -3,6 +3,7 @@ import path from "path";
 import { getDb, getSetting, now, UPLOAD_DIR, getFile } from "@/lib/db";
 import { META_API_VERSION } from "@/lib/meta";
 import { uploadPublic } from "@/lib/supabase";
+import { publishAllowed } from "@/lib/signoff";
 
 /* Putting a post out, properly.
 
@@ -129,6 +130,11 @@ export async function publishPost(postId: string): Promise<Published> {
     .get(postId) as { id: string; platform: string; caption: string; status: string; image: string | null } | undefined;
   if (!post) return { ok: false, url: "", error: "That post is not here any more", platform: "" };
   if (post.status === "posted") return { ok: false, url: "", error: "That one has already gone out", platform: post.platform };
+
+  /* Sign-off before anything else. A post that has not been cleared should not even get as far
+     as having its picture uploaded. */
+  const gate = publishAllowed(postId);
+  if (!gate.ok) return { ok: false, url: "", error: gate.reason, platform: post.platform };
 
   const can = publishable().find((c) => c.platform === post.platform);
   if (!can?.ready) return { ok: false, url: "", error: can?.note || `Circuit cannot publish to ${post.platform}`, platform: post.platform };
