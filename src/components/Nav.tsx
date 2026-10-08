@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef } from "react";
 import { NAV, activeNav } from "@/lib/nav";
 
 const ICONS: Record<string, React.ReactNode> = {
@@ -26,6 +27,26 @@ function Icon({ name }: { name: string }) {
 
 export default function Nav() {
   const path = usePathname();
+  const nav = useRef<HTMLElement>(null);
+
+  /* On a phone the rail is one horizontal strip holding nineteen links, so the page you are on
+     is usually off to the right of what you can see. Without this you land on a nav that looks
+     like it is showing you the start of the app rather than where you actually are. Harmless on
+     a desktop, where the strip is a column and nothing overflows. */
+  useEffect(() => {
+    /* Twice: once after a frame, and again when the web font has landed.
+       Running it during this render scrolls a strip whose links are still at fallback-font
+       widths — the measurement is taken, Space Grotesk arrives, every link changes width and
+       the strip ends up back near the start. Which of the two does the work depends on whether
+       the font was already cached, so both are needed and neither is enough. */
+    let gone = false;
+    const show = () => {
+      if (!gone) nav.current?.querySelector("a.active")?.scrollIntoView({ inline: "center", block: "nearest" });
+    };
+    const f = requestAnimationFrame(show);
+    document.fonts?.ready.then(show).catch(() => {});
+    return () => { gone = true; cancelAnimationFrame(f); };
+  }, [path]);
   // approvers opening a review link see the post only, not the workspace
   if (path?.startsWith("/review/")) return null;
   const active = activeNav(path);
@@ -39,7 +60,7 @@ export default function Nav() {
           <small>BNC Motors marketing</small>
         </div>
       </div>
-      <nav className="nav" aria-label="Primary">
+      <nav className="nav" aria-label="Primary" ref={nav}>
         {groups.map((g) => (
           <div key={g} style={{ display: "contents" }}>
             <div className="nav-section">{g}</div>
