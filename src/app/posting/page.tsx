@@ -5,6 +5,7 @@ import { Pill, Empty, useToast } from "@/components/ui";
 import { PlatformMark } from "@/components/Platform";
 import { Tabs } from "@/components/Sheet";
 import type { Ready } from "@/app/api/posting/route";
+import { composerFor } from "@/lib/composer";
 
 /* The hand-over.
 
@@ -39,6 +40,19 @@ export default function PostingPage() {
   const copy = async (text: string, what: string) => {
     try { await navigator.clipboard.writeText(text); push(`${what} copied`, "ok"); }
     catch { push("Could not reach the clipboard — select it by hand", "bad"); }
+  };
+
+  /* One press for the three things that otherwise have to be remembered in order: the picture
+     saved where it can be attached from, the words on the clipboard in case the prefill does
+     not take, and the platform's own composer open with the caption already in it. The post
+     itself is still sent by the person, on the platform — neither LinkedIn nor X lets Circuit
+     do that, and this does not pretend to. */
+  const writeItThere = async (r: Ready) => {
+    const c = composerFor(r.platform, r.caption);
+    if (!c) return;
+    if (r.image_file_id) downloadUrl(fileUrl(r.image_file_id), `${r.platform}-${r.when.slice(0, 10)}.jpg`);
+    if (c.alsoCopy) { try { await navigator.clipboard.writeText(r.caption); } catch { /* the composer may still fill */ } }
+    window.open(c.url, "_blank", "noopener,noreferrer");
   };
 
   /* Circuit publishes it itself, where Meta allows that. Confirmed first, because it is public
@@ -137,8 +151,16 @@ export default function PostingPage() {
                     <button className="btn small" type="button"
                       onClick={() => downloadUrl(fileUrl(r.image_file_id as string), `${r.platform}-${r.when.slice(0, 10)}.jpg`)}>Save the picture</button>
                   ) : null}
-                  {WHERE[r.platform] ? <a className="btn small ghost" href={WHERE[r.platform]} target="_blank" rel="noreferrer">Open {r.platform} ↗</a> : null}
+                  {composerFor(r.platform, r.caption)
+                    ? <button className="btn small primary" type="button" onClick={() => writeItThere(r)}>Write it on {r.platform} ↗</button>
+                    : WHERE[r.platform] ? <a className="btn small ghost" href={WHERE[r.platform]} target="_blank" rel="noreferrer">Open {r.platform} ↗</a> : null}
                 </div>
+
+                {/* Said on the card, because both limits are things you only discover at the
+                    moment you were about to press Post. */}
+                {composerFor(r.platform, r.caption)
+                  ? <p className="small muted" style={{ margin: 0 }}>{composerFor(r.platform, r.caption)!.caveat}</p>
+                  : null}
 
                 <div className="po-done">
                   <input className="input" placeholder="Paste the live link once it is up…"
