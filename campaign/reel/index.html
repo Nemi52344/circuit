@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1080, height=1920" />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+<style>
+  /* BNC Challenger — "Built to carry". 15s, 1080x1920.
+
+     Same argument as the poster and the carousel, told in time instead of space: the objection
+     first, then the number that answers it, then the engineering behind the number, then where
+     it was made. Fifteen seconds is four beats and no more — a reel that tries for five says
+     none of them.
+
+     Everything animates off one paused GSAP timeline and nothing moves on its own. No CSS
+     animations, no transitions, no randomness: the renderer seeks to a frame and screenshots
+     it, so any motion the timeline does not own would render as a still or a flicker.
+
+     Colour comes off the product rather than a palette — olive is the Challenger's own frame. */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 1080px; height: 1920px; overflow: hidden; background: #0A0B0A;
+    font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+    color: #F4F6F2;
+    -webkit-font-smoothing: antialiased;
+  }
+  #root { position: relative; width: 100%; height: 100%; }
+
+  /* Ground: a low olive wash and a faint engineering grid, both static. */
+  .wash { position: absolute; inset: 0;
+    background: radial-gradient(900px 760px at 70% 72%, rgba(124,142,74,.34) 0%, rgba(124,142,74,.07) 46%, transparent 76%); }
+  .grid { position: absolute; inset: 0; opacity: .05;
+    background-image: linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px);
+    background-size: 96px 96px;
+    -webkit-mask-image: radial-gradient(820px 900px at 50% 46%, #000 16%, transparent 74%); }
+
+  .stage { position: absolute; inset: 0; padding: 120px 84px; }
+
+  /* Everything sits around the vertical middle rather than the top third. A 9:16 reel is
+     watched eye-level, and the bottom couple of hundred pixels belong to the app's own
+     caption and buttons — type placed up top leaves the frame looking half empty and the
+     type itself fighting the account header. */
+
+  /* Beat 1 — the objection */
+  #hook { position: absolute; left: 84px; right: 84px; top: 790px; }
+  .hl { font-size: 104px; font-weight: 600; line-height: 1.04; letter-spacing: -.04em; }
+  .hl .w { display: inline-block; }
+  .hl em { font-style: normal; color: #A8BF6A; }
+
+  /* Beat 2 — the number */
+  #stat { position: absolute; left: 84px; right: 84px; top: 700px; }
+  #statEyebrow { font-family: "IBM Plex Mono", monospace; font-size: 22px; letter-spacing: .24em;
+    text-transform: uppercase; color: #A8BF6A; margin-bottom: 30px; }
+  .figure { display: flex; align-items: baseline; letter-spacing: -.055em; }
+  #count { font-size: 300px; font-weight: 700; line-height: .84; font-variant-numeric: tabular-nums; }
+  #plus { font-size: 132px; font-weight: 400; color: #A8BF6A; line-height: .84; }
+  #unit { font-size: 108px; font-weight: 500; margin-left: 14px; letter-spacing: -.02em; }
+  #statLine { margin-top: 34px; font-size: 44px; font-weight: 500; letter-spacing: -.02em; line-height: 1.26; max-width: 16ch; }
+
+  /* Beat 3 — the engineering, over the product */
+  #bike { position: absolute; left: 50%; width: 1120px; top: 1010px;
+    filter: drop-shadow(0 50px 70px rgba(0,0,0,.8)); }
+  #specs { position: absolute; left: 84px; right: 84px; top: 520px; }
+  .spec { font-family: "IBM Plex Mono", monospace; font-size: 30px; letter-spacing: .14em;
+    text-transform: uppercase; color: #F4F6F2; padding: 18px 0;
+    border-bottom: 1px solid rgba(244,246,242,.16); display: flex; gap: 20px; align-items: baseline; }
+  .spec i { font-style: normal; color: #A8BF6A; font-size: 20px; }
+
+  /* Beat 4 — where it comes from */
+  #made { position: absolute; left: 84px; right: 84px; top: 790px; text-align: center; }
+  #madeBig { font-size: 96px; font-weight: 600; letter-spacing: -.04em; line-height: 1.05; }
+  #madeBig em { font-style: normal; color: #A8BF6A; }
+  #madeSub { margin-top: 26px; font-family: "IBM Plex Mono", monospace; font-size: 24px;
+    letter-spacing: .22em; text-transform: uppercase; color: rgba(244,246,242,.55); }
+
+  /* Lockup */
+  #lock { position: absolute; left: 0; right: 0; top: 1230px; text-align: center; }
+  #lockMark { font-size: 58px; font-weight: 700; letter-spacing: -.02em; }
+  #lockMark i { font-style: normal; color: #A8BF6A; }
+  #lockUrl { margin-top: 20px; font-family: "IBM Plex Mono", monospace; font-size: 24px;
+    letter-spacing: .2em; text-transform: uppercase; color: rgba(244,246,242,.5); }
+
+  /* A persistent olive hairline at the very bottom: a progress bar, so a viewer knows the clip
+     is going somewhere. Scaled by the timeline, not by a CSS animation. */
+  /* No transform here: GSAP owns it outright and sets the start state in fromTo. A CSS
+     transform plus a GSAP tween on the same property means GSAP overwrites the whole thing. */
+  #bar { position: absolute; left: 0; bottom: 0; height: 7px; width: 100%; background: #A8BF6A;
+    transform-origin: left center; }
+</style>
+</head>
+<body>
+  <div id="root"
+       data-composition-id="main"
+       data-start="0" data-duration="15"
+       data-width="1080" data-height="1920">
+
+    <div id="wash" class="wash clip" data-start="0" data-duration="15" data-track-index="0"></div>
+    <div id="grid" class="grid clip" data-start="0" data-duration="15" data-track-index="0"></div>
+
+    <!-- Beat 1 · 0.0 – 3.4 -->
+    <div id="hook" class="clip" data-start="0" data-duration="3.6" data-track-index="1">
+      <div class="hl">
+        <span class="w">They</span> <span class="w">said</span> <span class="w">electric</span><br>
+        <span class="w">couldn&rsquo;t</span> <span class="w"><em>carry.</em></span>
+      </div>
+    </div>
+
+    <!-- Beat 2 · 3.2 – 7.6 -->
+    <div id="stat" class="clip" data-start="3.2" data-duration="4.6" data-track-index="2">
+      <div id="statEyebrow">Exoskeletal chassis</div>
+      <div class="figure"><span id="count">0</span><span id="plus">+</span><span id="unit">kg</span></div>
+      <div id="statLine">of load, carried.</div>
+    </div>
+
+    <!-- Beat 3 · 7.4 – 11.4 -->
+    <div id="specs" class="clip" data-start="7.4" data-duration="4.2" data-track-index="3">
+      <div class="spec"><i>01</i> Double cradle frame</div>
+      <div class="spec"><i>02</i> High-tensile steel</div>
+      <div class="spec"><i>03</i> Rain, hills, rough road</div>
+    </div>
+    <img id="bike" class="clip" src="assets/side.png" alt=""
+         data-start="7.0" data-duration="8" data-track-index="3">
+
+    <!-- Beat 4 · 11.4 – 15.0 -->
+    <div id="made" class="clip" data-start="11.4" data-duration="3.6" data-track-index="4">
+      <div id="madeBig">Designed, developed<br>and built <em>in India</em>.</div>
+      <div id="madeSub">Coimbatore, Tamil Nadu</div>
+    </div>
+    <div id="lock" class="clip" data-start="12.4" data-duration="2.6" data-track-index="4">
+      <div id="lockMark">BNC <i>Challenger</i></div>
+      <div id="lockUrl">bncmotors.in</div>
+    </div>
+
+    <div id="bar" class="clip" data-start="0" data-duration="15" data-track-index="5"></div>
+  </div>
+
+<script>
+  const tl = gsap.timeline({ paused: true });
+  const E = "power3.out";
+
+  /* Everything starts from an explicit state. Relying on whatever the DOM happens to look like
+     means a seek to the middle of the clip renders something the start of the clip never
+     produced — the usual cause of a frame that is right in preview and wrong in the render. */
+  gsap.set(["#hook", "#stat", "#specs", "#made", "#lock"], { opacity: 0 });
+  gsap.set("#bike", { opacity: 0, xPercent: -50, x: 0, scale: 1.06 });
+  gsap.set(".hl .w", { opacity: 0, yPercent: 110 });
+  gsap.set(".spec", { opacity: 0, x: -40 });
+  gsap.set("#count", { opacity: 1 });
+  gsap.set(["#plus", "#unit"], { opacity: 0 });
+  gsap.set("#statLine", { opacity: 0, y: 24 });
+  gsap.set("#statEyebrow", { opacity: 0, y: 14 });
+  gsap.set("#madeSub", { opacity: 0, y: 16 });
+  gsap.set("#lockUrl", { opacity: 0, y: 12 });
+
+  /* The whole clip, as one bar. */
+  tl.fromTo("#bar", { scaleX: 0 }, { scaleX: 1, duration: 15, ease: "none" }, 0);
+
+  /* Beat 1 — the words arrive one at a time, which is what makes a flat line read as speech. */
+  tl.set("#hook", { opacity: 1 }, 0.15)
+    .to(".hl .w", { opacity: 1, yPercent: 0, duration: 0.62, ease: E, stagger: 0.085 }, 0.15)
+    .to("#hook", { opacity: 0, y: -40, duration: 0.5, ease: "power2.in" }, 3.1);
+
+  /* Beat 2 — the hero. The count runs 0 → 200 and lands slightly before the unit appears, so
+     the eye reads the number settling rather than the whole lockup arriving at once. */
+  const n = { v: 0 };
+  tl.set("#stat", { opacity: 1 }, 3.3)
+    .to("#statEyebrow", { opacity: 1, y: 0, duration: 0.45, ease: E }, 3.35)
+    .to(n, {
+      v: 200, duration: 1.5, ease: "power2.out",
+      onUpdate: () => { document.getElementById("count").textContent = Math.round(n.v); },
+    }, 3.5)
+    .to("#plus", { opacity: 1, duration: 0.3, ease: E }, 5.0)
+    .to("#unit", { opacity: 1, duration: 0.3, ease: E }, 5.05)
+    .to("#statLine", { opacity: 1, y: 0, duration: 0.5, ease: E }, 5.2)
+    .to("#stat", { opacity: 0, y: -40, duration: 0.5, ease: "power2.in" }, 7.3);
+
+  /* Beat 3 — the bike settles in while the three proofs stack above it. */
+  tl.to("#bike", { opacity: 1, scale: 1, duration: 1.1, ease: E }, 7.1)
+    .set("#specs", { opacity: 1 }, 7.5)
+    .to(".spec", { opacity: 1, x: 0, duration: 0.55, ease: E, stagger: 0.22 }, 7.5)
+    .to("#specs", { opacity: 0, duration: 0.45, ease: "power2.in" }, 11.2);
+
+  /* Beat 4 — the bike drops back so the closing line owns the frame. */
+  tl.to("#bike", { opacity: 0.22, scale: 1.02, duration: 0.9, ease: "power2.inOut" }, 11.2)
+    .set("#made", { opacity: 1 }, 11.5)
+    .fromTo("#madeBig", { opacity: 0, y: 34 }, { opacity: 1, y: 0, duration: 0.7, ease: E }, 11.5)
+    .to("#madeSub", { opacity: 1, y: 0, duration: 0.5, ease: E }, 11.95);
+  /* The closing line stays up to the last frame. Fading it out under the lockup left the final
+     second showing a half-dissolved headline, which reads as a mistake rather than an ending —
+     and the last frame is the one that sits on the grid afterwards. */
+
+  tl.set("#lock", { opacity: 1 }, 12.5)
+    .fromTo("#lockMark", { opacity: 0, y: 26 }, { opacity: 1, y: 0, duration: 0.6, ease: E }, 12.5)
+    .to("#lockUrl", { opacity: 1, y: 0, duration: 0.45, ease: E }, 12.9);
+
+  /* The runtime provides this, but guarding it means the file also opens standalone in a
+     browser for a quick look without the Studio around it. */
+  window.__timelines = window.__timelines || {};
+  window.__timelines["main"] = tl;
+  tl.seek(0);
+</script>
+</body>
+</html>

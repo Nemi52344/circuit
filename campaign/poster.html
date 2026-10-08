@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* One poster, 1080 x 1350 — Instagram portrait, the tallest frame the feed will give you.
+
+     The brief is a single claim and the proof of it. The Challenger's exoskeletal chassis
+     carries 200 kg and more, and the people being spoken to here — delivery riders, milk and
+     grocery vendors, small fleets — have been told for years that an electric two-wheeler
+     cannot do that. So the number is the whole poster, and everything else gets out of its way.
+
+     Olive and black come off the bike itself rather than a palette: the frame is olive, the
+     body is black, and the Challenger wordmark is red. Using the product's own colours means
+     the poster cannot clash with the photograph sitting in the middle of it. */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1080px; height: 1350px; position: relative; overflow: hidden;
+    background: #0A0B0A;
+    font-family: "Space Grotesk", system-ui, sans-serif;
+    color: #F4F6F2;
+  }
+  /* A low olive wash from the bottom corner, so the bike sits in light rather than on a flat
+     black rectangle. */
+  .glow {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(1100px 680px at 72% 86%, rgba(124, 142, 74, .40) 0%, rgba(124, 142, 74, .10) 42%, transparent 72%),
+      radial-gradient(760px 520px at 12% 8%, rgba(255,255,255,.055) 0%, transparent 70%);
+  }
+  /* A faint engineering grid. It reads as drawing-board, not decoration, and at 3% it is felt
+     more than seen. */
+  .grid {
+    position: absolute; inset: 0; opacity: .055;
+    background-image: linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px);
+    background-size: 90px 90px;
+    mask-image: radial-gradient(900px 900px at 50% 42%, #000 20%, transparent 78%);
+    -webkit-mask-image: radial-gradient(900px 900px at 50% 42%, #000 20%, transparent 78%);
+  }
+
+  .frame { position: absolute; inset: 0; padding: 64px 68px; display: flex; flex-direction: column; }
+
+  .top { display: flex; align-items: flex-start; justify-content: space-between; }
+  .mark { font-size: 27px; font-weight: 700; letter-spacing: -.02em; }
+  .mark i { font-style: normal; color: #A8BF6A; }
+  .kicker {
+    font-family: "IBM Plex Mono", monospace; font-size: 13px; letter-spacing: .20em;
+    text-transform: uppercase; color: rgba(244,246,242,.52); text-align: right; line-height: 1.7;
+  }
+
+  .claim { margin-top: 44px; }
+  .eyebrow {
+    font-family: "IBM Plex Mono", monospace; font-size: 14px; letter-spacing: .22em;
+    text-transform: uppercase; color: #A8BF6A; margin-bottom: 20px;
+  }
+  /* The number is the poster. 210px is not a shout, it is the only thing anybody will read at
+     thumb speed, so it had better be the thing that matters. */
+  .num { font-size: 188px; font-weight: 700; line-height: .82; letter-spacing: -.055em; }
+  .num small { font-size: 66px; font-weight: 500; letter-spacing: -.02em; margin-left: 6px; }
+  .num sup { font-size: 80px; font-weight: 400; color: #A8BF6A; vertical-align: super; line-height: 0; margin-left: 2px; }
+  .under { margin-top: 22px; font-size: 32px; font-weight: 500; line-height: 1.28; max-width: 22ch; letter-spacing: -.015em; }
+  .under em { font-style: normal; color: #A8BF6A; }
+  /* A hyphenated word broken across two lines reads as a typo, not a line break. */
+  .nb { white-space: nowrap; }
+
+  /* The whole vehicle, across the middle band.
+
+     The first cut had it twice this size and bleeding off the right edge, which looked purposeful
+     and told you nothing: all you could see was a front wheel and a handlebar. On a poster whose
+     entire argument is that this thing carries weight, the frame and the carrier are the argument.
+     A product shot that has been cropped past recognition is decoration. */
+  .bike {
+    position: absolute; left: 50%; transform: translateX(-50%);
+    top: 498px; width: 1000px;
+    filter: drop-shadow(0 40px 60px rgba(0,0,0,.78));
+  }
+
+  .foot { margin-top: auto; }
+  .facts { display: flex; gap: 0; border-top: 1px solid rgba(244,246,242,.16); padding-top: 24px; }
+  .fact { flex: 1; }
+  .fact + .fact { border-left: 1px solid rgba(244,246,242,.16); padding-left: 26px; }
+  .fact b { display: block; font-size: 25px; font-weight: 600; letter-spacing: -.01em; }
+  .fact span {
+    display: block; margin-top: 7px; font-family: "IBM Plex Mono", monospace;
+    font-size: 11.5px; letter-spacing: .13em; text-transform: uppercase; color: rgba(244,246,242,.5); line-height: 1.5;
+  }
+  .sig {
+    margin-top: 30px; display: flex; align-items: center; justify-content: space-between;
+    font-family: "IBM Plex Mono", monospace; font-size: 12.5px; letter-spacing: .14em;
+    text-transform: uppercase; color: rgba(244,246,242,.42);
+  }
+  .sig b { color: #F4F6F2; font-weight: 500; }
+</style>
+</head>
+<body>
+  <div class="glow"></div>
+  <div class="grid"></div>
+  <img class="bike" src="src/side.png" alt="">
+
+  <div class="frame">
+    <div class="top">
+      <div class="mark">BNC <i>Challenger</i></div>
+      <div class="kicker">Built in Coimbatore<br>Made in India</div>
+    </div>
+
+    <div class="claim">
+      <div class="eyebrow">Exoskeletal chassis</div>
+      <div class="num">200<sup>+</sup><small>kg</small></div>
+      <div class="under">of load. On an <em>electric</em> <span class="nb">two-wheeler.</span></div>
+    </div>
+
+    <div class="foot">
+      <div class="facts">
+        <div class="fact"><b>Double cradle frame</b><span>High-tensile steel</span></div>
+        <div class="fact"><b>Rain, hills, rough road</b><span>Rugged to the core</span></div>
+        <div class="fact"><b>Built in-house</b><span>Designed &amp; developed in India</span></div>
+      </div>
+      <div class="sig">
+        <span>bncmotors.in</span>
+        <span><b>Challenger S110 · S125</b></span>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

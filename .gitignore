@@ -32,3 +32,9 @@ tsconfig.tsbuildinfo
 # Kept out of a public repo; the app reads the local copy, which stays on this Mac.
 docs/PRD.html
 public/PRD.html
+
+# The video toolchain pulls its own node_modules and renders large frames; the composition
+# source and the finished files are what matter, not the machinery around them.
+campaign/reel/node_modules/
+campaign/reel/.hyperframes/
+campaign/reel/renders/frames/
