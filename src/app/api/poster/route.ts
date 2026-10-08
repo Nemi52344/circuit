@@ -27,8 +27,18 @@ export const POST = handle(async (req) => {
 
   if (!TEMPLATES.some((t) => t.id === b.template)) return bad("Pick a template");
   if (!SIZES[b.size]) return bad("Pick a size");
-  if (b.template === "load" && !String(b.number || "").trim()) return bad("The big-number template needs a number");
-  if (b.template !== "load" && !String(b.headline || "").trim()) return bad("That template needs a headline");
+  /* Each template is checked against what it actually cannot be drawn without, rather than one
+     rule for all of them — a welcome card with no name is an empty circle, and a point slide
+     is allowed either a figure or a claim. */
+  const has = (k: keyof typeof b) => Boolean(String(b[k] ?? "").trim());
+  const missing =
+    b.template === "load" && !has("number") ? "a number"
+    : b.template === "point" && !has("number") && !has("headline") ? "a number or a headline"
+    : b.template === "welcome" && !has("name") ? "the person's name"
+    : b.template === "milestone" && !has("name") && !has("number") ? "a name or a figure"
+    : ["fact", "statement", "cover", "hiring", "crew"].includes(b.template) && !has("headline") ? "a headline"
+    : "";
+  if (missing) return bad(`That template needs ${missing}`);
 
   /* The preview is the same HTML the render prints, so what is on screen is what comes out —
      rather than an approximation that drifts from it one edit at a time. */

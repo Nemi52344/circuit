@@ -23,18 +23,37 @@ const run = promisify(execFile);
 
    It deliberately cannot invent anything. Every string on the poster is passed in. */
 
-export type Template = "load" | "fact" | "statement";
+export type Template =
+  | "load" | "fact" | "statement"
+  | "cover" | "point"
+  | "welcome" | "milestone" | "hiring" | "crew";
 
-export const TEMPLATES: { id: Template; name: string; what: string; needs: string[] }[] = [
-  { id: "load", name: "Big number", what: "One figure, the product beneath it, three supporting facts.", needs: ["number", "photo"] },
-  { id: "fact", name: "Fact card", what: "A single claim set large. No photograph — for a figure that has to be read, not admired.", needs: ["headline"] },
-  { id: "statement", name: "Statement", what: "A line of copy over the product. For an opening slide or a closing one.", needs: ["headline", "photo"] },
+export type Group = "Product" | "Carousel" | "Crew";
+
+export const TEMPLATES: { id: Template; group: Group; name: string; what: string; needs: string[] }[] = [
+  { id: "load", group: "Product", name: "Big number", what: "One figure, the product beneath it, three supporting facts.", needs: ["number", "photo"] },
+  { id: "fact", group: "Product", name: "Fact card", what: "A single claim set large. No photograph — for a figure to be read, not admired.", needs: ["headline"] },
+  { id: "statement", group: "Product", name: "Statement", what: "A line of copy over the product.", needs: ["headline", "photo"] },
+
+  { id: "cover", group: "Carousel", name: "Cover slide", what: "Opens a set: the question, the product off the edge, a swipe prompt.", needs: ["headline"] },
+  { id: "point", group: "Carousel", name: "Point slide", what: "One figure or claim per slide, with its source printed on it.", needs: ["headline or number"] },
+
+  /* Crew work is a different job from selling a bike. It is read by the people in the picture
+     and by the ones deciding whether to join, so the product gets out of the way and a face
+     takes the middle of the frame. */
+  { id: "welcome", group: "Crew", name: "Welcome", what: "A new joiner: their photograph, name and role.", needs: ["name", "role", "photo"] },
+  { id: "milestone", group: "Crew", name: "Milestone", what: "Years served, a promotion, something finished. A face and a figure.", needs: ["name", "number"] },
+  { id: "hiring", group: "Crew", name: "We are hiring", what: "The role, where it is, and what the work actually is.", needs: ["headline"] },
+  { id: "crew", group: "Crew", name: "From the floor", what: "A line from the team, over a photograph of the work.", needs: ["headline"] },
 ];
 
 export const SIZES = {
   post: { w: 1080, h: 1350, label: "Portrait post 4:5" },
   square: { w: 1080, h: 1080, label: "Square 1:1" },
   story: { w: 1080, h: 1920, label: "Story / Reel 9:16" },
+  /* LinkedIn crops a 4:5 badly in the feed and shows a landscape card whole. Crew posts mostly
+     live there, so the shape they are read in is worth having. */
+  linkedin: { w: 1200, h: 627, label: "LinkedIn landscape" },
 } as const;
 export type SizeKey = keyof typeof SIZES;
 
@@ -50,8 +69,18 @@ export type PosterSpec = {
   facts?: string[];
   photo_file_id?: string | null;
   mark?: string;
+  /* The accented half of the wordmark. A product poster says "BNC Challenger"; a job ad or a
+     welcome card says "BNC Motors", because neither is about the Challenger. */
+  mark_tail?: string;
   footnote?: string;
   source?: string;
+  /* Crew templates */
+  name?: string;
+  role?: string;
+  place?: string;
+  /* Carousel: "2 / 5" in the corner, so somebody knows whether swiping is worth it */
+  counter?: string;
+  prompt?: string;
 };
 
 const esc = (s: string) =>
@@ -88,27 +117,87 @@ export function posterHtml(spec: PosterSpec): string {
   const u = h / 1350;
   const px = (n: number) => `${Math.round(n * u)}px`;
 
-  const bike = photo
-    ? `<img class="bike" src="file://${photo.split("/").map(encodeURIComponent).join("/")}" alt="">`
-    : "";
+  const src = photo ? `file://${photo.split("/").map(encodeURIComponent).join("/")}` : "";
+  /* Three jobs, three framings. A product cut-out floats in the middle band; a carousel cover
+     pushes it off the right edge so the words keep the left; a person is cropped round and
+     sits inside the text block, because a face floated behind type is a stock photo. */
+  const PERSON = ["welcome", "milestone"];
+  const bike = !photo ? ""
+    : PERSON.includes(spec.template) ? ""
+    : spec.template === "cover" ? `<img class="bike edge" src="${src}" alt="">`
+    : spec.template === "crew" || spec.template === "hiring" ? `<img class="bleed" src="${src}" alt="">`
+    : `<img class="bike" src="${src}" alt="">`;
+  const face = photo && PERSON.includes(spec.template)
+    ? `<img class="face" src="${src}" alt="">` : "";
 
+  /* Each template is a body, not a separate file. They share the ground, the mark, the fact
+     row and the signature, which is what keeps a welcome post and a product poster looking
+     like they came from the same company. */
+  const num = (big = false) =>
+    `<div class="num${big ? " huge" : ""}">${esc(spec.number || "")}${spec.superscript ? `<sup>${esc(spec.superscript)}</sup>` : ""}${spec.unit ? `<small>${esc(spec.unit)}</small>` : ""}</div>`;
+  const eyebrow = spec.eyebrow ? `<div class="eyebrow">${esc(spec.eyebrow)}</div>` : "";
+
+  const CREW = ["welcome", "milestone", "hiring", "crew"];
+  const T = spec.template;
   const body =
-    spec.template === "load"
-      ? `<div class="claim">
-           ${spec.eyebrow ? `<div class="eyebrow">${esc(spec.eyebrow)}</div>` : ""}
-           <div class="num">${esc(spec.number || "")}${spec.superscript ? `<sup>${esc(spec.superscript)}</sup>` : ""}${spec.unit ? `<small>${esc(spec.unit)}</small>` : ""}</div>
-           ${spec.headline ? `<div class="under">${escKeep(spec.headline)}</div>` : ""}
+    T === "load"
+      ? `<div class="claim">${eyebrow}${num()}${spec.headline ? `<div class="under">${escKeep(spec.headline)}</div>` : ""}</div>`
+
+    : T === "fact"
+      ? `<div class="claim mid">${eyebrow}${spec.number ? num() : ""}${spec.headline ? `<div class="big">${escKeep(spec.headline)}</div>` : ""}</div>`
+
+    : T === "statement"
+      ? `<div class="claim mid">${eyebrow}${spec.headline ? `<div class="big">${escKeep(spec.headline)}</div>` : ""}</div>`
+
+    /* Carousel cover: the words hold the left, the product bleeds off the right corner. Centred
+       and full width it runs straight through the swipe prompt. */
+    : T === "cover"
+      ? `<div class="claim mid narrow">${eyebrow}
+           ${spec.headline ? `<div class="big">${escKeep(spec.headline)}</div>` : ""}
+           ${spec.footnote ? `<div class="say">${escKeep(spec.footnote)}</div>` : ""}
+           ${spec.prompt ? `<div class="swipe">${esc(spec.prompt)}</div>` : ""}
          </div>`
-      : spec.template === "fact"
+
+    : T === "point"
+      ? `<div class="claim mid">${eyebrow}
+           ${spec.number ? num(true) : ""}
+           ${spec.headline ? `<div class="${spec.number ? "say" : "big"}">${escKeep(spec.headline)}</div>` : ""}
+         </div>`
+
+    /* A new joiner. Their face is the subject, so it is round, centred and large, and the
+       product is nowhere near it. */
+    : T === "welcome"
+      ? `<div class="claim mid centre">
+           ${eyebrow || '<div class="eyebrow">Welcome to the crew</div>'}
+           ${face}
+           ${spec.name ? `<div class="person">${esc(spec.name)}</div>` : ""}
+           ${spec.role ? `<div class="role">${esc(spec.role)}</div>` : ""}
+           ${spec.headline ? `<div class="say centred">${escKeep(spec.headline)}</div>` : ""}
+           ${spec.place ? `<div class="place">${esc(spec.place)}</div>` : ""}
+         </div>`
+
+    : T === "milestone"
+      ? `<div class="claim mid centre">
+           ${eyebrow}
+           ${face}
+           ${spec.number ? num(true) : ""}
+           ${spec.name ? `<div class="person small">${esc(spec.name)}</div>` : ""}
+           ${spec.role ? `<div class="role">${esc(spec.role)}</div>` : ""}
+           ${spec.headline ? `<div class="say centred">${escKeep(spec.headline)}</div>` : ""}
+         </div>`
+
+    : T === "hiring"
       ? `<div class="claim mid">
-           ${spec.eyebrow ? `<div class="eyebrow">${esc(spec.eyebrow)}</div>` : ""}
-           ${spec.number ? `<div class="num">${esc(spec.number)}${spec.unit ? `<small>${esc(spec.unit)}</small>` : ""}</div>` : ""}
+           ${eyebrow || '<div class="eyebrow">We are hiring</div>'}
            ${spec.headline ? `<div class="big">${escKeep(spec.headline)}</div>` : ""}
+           ${spec.place ? `<div class="role">${esc(spec.place)}</div>` : ""}
+           ${spec.footnote ? `<div class="say">${escKeep(spec.footnote)}</div>` : ""}
          </div>`
-      : `<div class="claim mid">
-           ${spec.eyebrow ? `<div class="eyebrow">${esc(spec.eyebrow)}</div>` : ""}
-           ${spec.headline ? `<div class="big">${escKeep(spec.headline)}</div>` : ""}
-         </div>`;
+
+    : `<div class="claim mid">${eyebrow}
+         ${spec.headline ? `<div class="quote">${escKeep(spec.headline)}</div>` : ""}
+         ${spec.name ? `<div class="role">${esc(spec.name)}${spec.role ? ` · ${esc(spec.role)}` : ""}</div>` : ""}
+       </div>`;
 
   const factRow = facts.length
     ? `<div class="facts">${facts
@@ -163,13 +252,50 @@ export function posterHtml(spec: PosterSpec): string {
     font-family:"IBM Plex Mono",monospace; font-size:${px(12.5)}; letter-spacing:.14em;
     text-transform:uppercase; color:rgba(244,246,242,.42); }
   .sig b { color:#F4F6F2; font-weight:500; }
+
+  /* ---- carousel ---- */
+  .counter { font-family:"IBM Plex Mono",monospace; font-size:${px(14)}; letter-spacing:.2em; color:rgba(244,246,242,.45); }
+  .counter b { color:#A8BF6A; font-weight:500; }
+  .claim.narrow .big { max-width:11ch; }
+  .say { margin-top:${px(26)}; font-size:${px(31)}; font-weight:400; line-height:1.4; max-width:19ch;
+    color:rgba(244,246,242,.84); letter-spacing:-.01em; }
+  .say.centred { margin-left:auto; margin-right:auto; text-align:center; max-width:24ch; }
+  .swipe { margin-top:${px(26)}; font-family:"IBM Plex Mono",monospace; font-size:${px(14)};
+    letter-spacing:.2em; text-transform:uppercase; color:#A8BF6A; }
+  .num.huge { font-size:${px(200)}; }
+  /* Off the right corner, so the words on the left are never run through. */
+  .bike.edge { left:auto; right:${px(-150)}; top:auto; bottom:${px(96)}; transform:none; width:${px(760)}; }
+  /* A photograph of the work, behind everything, dimmed enough to read type over. */
+  .bleed { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:.30; }
+
+  /* ---- crew ---- */
+  .claim.centre { text-align:center; }
+  /* Round, and large enough to be a person rather than a thumbnail. */
+  .face { width:${px(300)}; height:${px(300)}; border-radius:50%; object-fit:cover; display:block;
+    margin:0 auto ${px(32)}; border:${px(4)} solid #A8BF6A; }
+  .person { font-size:${px(72)}; font-weight:600; letter-spacing:-.035em; line-height:1.08; }
+  .person.small { font-size:${px(48)}; margin-top:${px(20)}; }
+  .role { margin-top:${px(12)}; font-family:"IBM Plex Mono",monospace; font-size:${px(20)};
+    letter-spacing:.18em; text-transform:uppercase; color:#A8BF6A; }
+  .place { margin-top:${px(22)}; font-family:"IBM Plex Mono",monospace; font-size:${px(14)};
+    letter-spacing:.18em; text-transform:uppercase; color:rgba(244,246,242,.45); }
+  .quote { font-size:${px(54)}; font-weight:500; line-height:1.26; letter-spacing:-.025em; max-width:20ch; }
+  .quote::before { content:"\\201C"; color:#A8BF6A; }
+  .quote::after { content:"\\201D"; color:#A8BF6A; }
+
+  /* A landscape card has half the height, so the type that works in a 4:5 overruns it. */
+  ${w > h ? `.num { font-size:${px(150)}; } .num.huge { font-size:${px(160)}; }
+    .big { font-size:${px(54)}; max-width:22ch; } .person { font-size:${px(52)}; }
+    .face { width:${px(190)}; height:${px(190)}; margin-bottom:${px(20)}; }
+    .quote { font-size:${px(42)}; } .frame { padding:${px(48)} ${px(56)}; }` : ""}
 </style></head><body>
   <div class="glow"></div><div class="grid"></div>
   ${bike}
   <div class="frame">
     <div class="top">
-      <div class="mark">${esc(spec.mark || "BNC")} <i>Challenger</i></div>
-      ${spec.footnote ? `<div class="kicker">${esc(spec.footnote)}</div>` : ""}
+      <div class="mark">${esc(spec.mark || "BNC")} <i>${esc(spec.mark_tail || (CREW.includes(spec.template) ? "Motors" : "Challenger"))}</i></div>
+      ${spec.counter ? `<div class="counter">${esc(spec.counter)}</div>`
+        : spec.footnote && !["cover", "hiring"].includes(spec.template) ? `<div class="kicker">${esc(spec.footnote)}</div>` : ""}
     </div>
     ${body}
     <div class="foot">

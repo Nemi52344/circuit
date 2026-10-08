@@ -12,7 +12,7 @@ import { useToast } from "@/components/ui";
    The preview is the real template rendered in an iframe, not a mock-up of it — so what is on
    screen is what comes out of Chrome, and the two cannot drift apart. */
 
-type Template = { id: string; name: string; what: string; needs: string[] };
+type Template = { id: string; group: string; name: string; what: string; needs: string[] };
 type Size = { w: number; h: number; label: string };
 type Photo = { id: string; name: string };
 type Made = { file_id: string; creation_id: string | null; name: string; width: number; height: number };
@@ -22,6 +22,7 @@ type Spec = {
   eyebrow: string; number: string; unit: string; superscript: string;
   headline: string; facts: string[]; photo_file_id: string;
   footnote: string; source: string;
+  name: string; role: string; place: string; counter: string; prompt: string;
 };
 
 const BLANK: Spec = {
@@ -29,6 +30,7 @@ const BLANK: Spec = {
   eyebrow: "", number: "", unit: "", superscript: "+",
   headline: "", facts: ["", "", ""], photo_file_id: "",
   footnote: "Built in Coimbatore\nMade in India", source: "",
+  name: "", role: "", place: "", counter: "", prompt: "",
 };
 
 export default function PosterPage() {
@@ -76,6 +78,7 @@ export default function PosterPage() {
 
   if (!opts) return <p className="muted">Loading…</p>;
   const tpl = opts.templates.find((t) => t.id === s.template);
+  const isCrew = tpl?.group === "Crew";
 
   return (
     <div className="stack">
@@ -94,15 +97,22 @@ export default function PosterPage() {
         <section className="panel stack">
           <div>
             <div className="eyebrow" style={{ marginBottom: 8 }}>Template</div>
-            <div className="tpl-row">
-              {opts.templates.map((t) => (
-                <button key={t.id} type="button"
-                  className={`tpl ${s.template === t.id ? "on" : ""}`}
-                  onClick={() => set("template", t.id)}>
-                  <b>{t.name}</b><span>{t.what}</span>
-                </button>
-              ))}
-            </div>
+            {/* Grouped, because nine flat buttons is a wall. The groups are the three jobs
+                this does: sell the bike, carry a set, talk about the people. */}
+            {["Product", "Carousel", "Crew"].map((g) => (
+              <div key={g} style={{ marginBottom: 10 }}>
+                <div className="small muted" style={{ marginBottom: 6 }}>{g}</div>
+                <div className="tpl-row">
+                  {opts.templates.filter((t) => t.group === g).map((t) => (
+                    <button key={t.id} type="button"
+                      className={`tpl ${s.template === t.id ? "on" : ""}`}
+                      onClick={() => set("template", t.id)}>
+                      <b>{t.name}</b><span>{t.what}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
 
           <label className="field">
@@ -138,13 +148,53 @@ export default function PosterPage() {
               onChange={(e) => set("headline", e.target.value)} />
           </label>
 
+          {isCrew ? (
+            <div className="form-grid">
+              <label className="field">
+                <span className="eyebrow">Name</span>
+                <input className="input" value={s.name} placeholder="Ramya Subramanian"
+                  onChange={(e) => set("name", e.target.value)} />
+              </label>
+              <label className="field">
+                <span className="eyebrow">Role</span>
+                <input className="input" value={s.role} placeholder="Production engineer"
+                  onChange={(e) => set("role", e.target.value)} />
+              </label>
+              <label className="field full">
+                <span className="eyebrow">Place</span>
+                <input className="input" value={s.place} placeholder="Coimbatore · full time"
+                  onChange={(e) => set("place", e.target.value)} />
+              </label>
+            </div>
+          ) : null}
+
+          {s.template === "cover" || s.template === "point" ? (
+            <div className="form-grid">
+              <label className="field">
+                <span className="eyebrow">Slide counter</span>
+                <input className="input" value={s.counter} placeholder="1 / 5"
+                  onChange={(e) => set("counter", e.target.value)} />
+              </label>
+              <label className="field">
+                <span className="eyebrow">Swipe prompt</span>
+                <input className="input" value={s.prompt} placeholder="Swipe — four answers"
+                  onChange={(e) => set("prompt", e.target.value)} />
+              </label>
+            </div>
+          ) : null}
+
           <label className="field">
-            <span className="eyebrow">Photograph</span>
+            <span className="eyebrow">{isCrew && (s.template === "welcome" || s.template === "milestone") ? "Their photograph" : "Photograph"}</span>
             <select className="select" value={s.photo_file_id} onChange={(e) => set("photo_file_id", e.target.value)}>
               <option value="">None</option>
               {opts.photos.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
-            <span className="small muted">Only pictures marked as the brand&rsquo;s own.</span>
+            <span className="small muted">
+              Only pictures marked as the brand&rsquo;s own.
+              {s.template === "welcome" || s.template === "milestone"
+                ? " Cropped to a circle, so a head-and-shoulders shot works best."
+                : ""}
+            </span>
           </label>
 
           <div className="field">
