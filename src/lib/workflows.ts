@@ -53,7 +53,16 @@ async function runAction(key: ActionKey): Promise<{ ok: boolean; output: unknown
     switch (key) {
       case "read_competitors": {
         const r = await syncCompetitorInstagram(7);
-        return { ok: !r.errors.length, output: { saved: r.saved, already: r.already, errors: r.errors }, error: r.errors[0] || "" };
+        /* One competitor's page being down is a fact about that competitor, not a failed sweep.
+           Treating it as failure threw away the five accounts that did answer and turned a
+           normal morning into a red step — the same mistake the website check used to make
+           with a 404. It fails only when nothing at all could be read. */
+        const read = r.saved + r.already;
+        return {
+          ok: read > 0 || !r.errors.length,
+          output: { saved: r.saved, already: r.already, errors: r.errors },
+          error: read > 0 ? "" : r.errors[0] || "",
+        };
       }
       case "pull_our_numbers": {
         const r = await syncOwnInstagram(50);
@@ -182,6 +191,7 @@ export function sweepStuckRuns(olderThanMinutes = 60): number {
 
 export function recentRuns(limit = 12): (Run & { name: string })[] {
   sweepStuckRuns();
+  closeSupersededRuns();
   return getDb().prepare(`SELECT r.*, w.name FROM workflow_runs r JOIN workflows w ON w.id = r.workflow_id ORDER BY r.started_at DESC LIMIT ?`).all(limit) as (Run & { name: string })[];
 }
 
@@ -365,8 +375,55 @@ export function dueWorkflows(): Workflow[] {
     if (!w.active || w.trigger === "manual") return false;
     if (w.trigger === "weekly" && w.weekday !== null && w.weekday !== nowD.getDay()) return false;
     if (hhmm < (w.at_time || "09:00")) return false;
-    return !w.last_run_at || w.last_run_at.slice(0, 10) < today;
+    if (w.last_run_at && w.last_run_at.slice(0, 10) >= today) return false;
+    /* A routine that is still waiting on a person does not get started again tomorrow.
+
+       Without this a daily workflow whose last step is "drop the PDF in the folder" begins a
+       fresh run every morning, hits the same wall, and leaves another half-finished run
+       behind — five of them had collected for the intel routine alone. Starting a second copy
+       of a job nobody has finished does not get the job done, it just makes the board unreadable
+       and hides the runs that genuinely need attention. */
+    return !hasWaitingRun(w.id);
   });
+}
+
+/* Is an earlier run of this routine still stopped, waiting for somebody? */
+export function hasWaitingRun(workflowId: string): boolean {
+  const row = getDb().prepare("SELECT 1 FROM workflow_runs WHERE workflow_id = ? AND status = 'waiting' LIMIT 1").get(workflowId);
+  return Boolean(row);
+}
+
+/* Closes waiting runs that a newer one has overtaken.
+
+   A run stopped at a human step is not finished and not failed, so nothing ever cleared it.
+   Keeping the most recent one per routine keeps the thing somebody might still act on, and
+   retires the copies behind it rather than leaving a board nobody reads. */
+export function closeSupersededRuns(): number {
+  const db = getDb();
+  /* Runs whose routine has since been deleted are closed outright. Nobody can act on a step
+     belonging to a workflow that no longer exists, and because the board joins to workflows
+     they were invisible — two of them had sat in the table since September, counted as
+     waiting by every total and shown by nothing. */
+  const orphans = db.prepare(`
+    UPDATE workflow_runs SET status = 'failed', finished_at = ?
+    WHERE status = 'waiting' AND workflow_id NOT IN (SELECT id FROM workflows)`).run(now()).changes;
+
+  const rows = db.prepare(`
+    SELECT id, workflow_id, steps FROM workflow_runs
+    WHERE status = 'waiting' ORDER BY workflow_id, started_at DESC`).all() as { id: string; workflow_id: string; steps: string }[];
+  const seen = new Set<string>();
+  let closed = 0;
+  for (const r of rows) {
+    if (!seen.has(r.workflow_id)) { seen.add(r.workflow_id); continue; }
+    const steps = JSON.parse(r.steps || "[]") as RunStep[];
+    for (const st of steps) {
+      if (st.status === "waiting") { st.status = "skipped"; st.error = "A newer run of this routine took over."; }
+    }
+    db.prepare("UPDATE workflow_runs SET status = 'failed', steps = ?, finished_at = ? WHERE id = ?")
+      .run(JSON.stringify(steps), now(), r.id);
+    closed += 1;
+  }
+  return closed + orphans;
 }
 
 /* The daily intel routine used to do the sweep itself. Claude does it better and does it
