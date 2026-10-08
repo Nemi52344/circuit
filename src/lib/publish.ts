@@ -73,6 +73,31 @@ async function graph(p: string, body: Record<string, string>) {
   return j;
 }
 
+/* The pictures on a post, in order.
+
+   A post used to be one image. A carousel is not a different kind of post, it is the same post
+   with more than one picture on it — which is why the slides live in their own table keyed by
+   position rather than as five posts pretending to be one, or a JSON blob nobody can join to. */
+export function mediaFor(postId: string): string[] {
+  const rows = getDb().prepare("SELECT file_id FROM post_media WHERE post_id = ? ORDER BY position").all(postId) as { file_id: string }[];
+  return rows.map((r) => r.file_id);
+}
+
+export function setMedia(postId: string, fileIds: string[]) {
+  const db = getDb();
+  const tx = db.transaction((ids: string[]) => {
+    db.prepare("DELETE FROM post_media WHERE post_id = ?").run(postId);
+    ids.forEach((fid, i) => db.prepare("INSERT INTO post_media (post_id, file_id, position) VALUES (?, ?, ?)").run(postId, fid, i));
+    /* The first slide stays on the post itself, so everything that only knows about one
+       picture — the calendar card, the queue row, the hand-over to Mark — keeps working. */
+    db.prepare("UPDATE posts SET file_id = ?, updated_at = ? WHERE id = ?").run(ids[0] || null, now(), postId);
+  });
+  tx(fileIds);
+}
+
+/* Instagram takes 2 to 10, and it is Meta's limit rather than ours. */
+export const CAROUSEL_MAX = 10;
+
 /* The picture, somewhere Meta can fetch it from. */
 async function pictureUrl(fileId: string): Promise<string> {
   const row = getFile(fileId);
@@ -141,17 +166,46 @@ export async function publishPost(postId: string): Promise<Published> {
   if (!post.image) return { ok: false, url: "", error: "There is no picture on this post", platform: post.platform };
 
   const token = getSetting("meta_token") as string;
+  /* One picture or several: the slides table is the truth, and a post that predates it falls
+     back to its single image rather than publishing nothing. */
+  const slides = (() => {
+    const m = mediaFor(postId);
+    return m.length ? m.slice(0, CAROUSEL_MAX) : [post.image as string];
+  })();
   try {
-    const img = await pictureUrl(post.image);
+    const img = await pictureUrl(slides[0]);
     let link = "";
 
     if (post.platform === "Instagram") {
       const user = getSetting("ig_user_id");
-      /* A container first, then publish it. Meta fetches the picture in between, which is why
-         the two calls are separate and why the URL has to stay reachable until it has. */
-      const made = await graph(`${user}/media`, { image_url: img, caption: post.caption || "", access_token: token });
-      if (!made.id) throw new Error("Instagram did not make the post container");
-      const out = await graph(`${user}/media_publish`, { creation_id: made.id, access_token: token });
+      let parent: string | undefined;
+
+      if (slides.length > 1) {
+        /* A carousel is n+1 containers: one per slide marked as a carousel item, then a parent
+           holding their ids. Meta fetches each picture as its container is made, and every
+           child carries its own 24-hour expiry — so they are built back to back here rather
+           than days apart, which is the documented way to get a parent that refuses to publish. */
+        const children: string[] = [];
+        for (const fid of slides) {
+          const url = await pictureUrl(fid);
+          const kid = await graph(`${user}/media`, { image_url: url, is_carousel_item: "true", access_token: token });
+          if (!kid.id) throw new Error("Instagram did not accept one of the slides");
+          children.push(kid.id);
+        }
+        const made = await graph(`${user}/media`, {
+          media_type: "CAROUSEL", children: children.join(","), caption: post.caption || "", access_token: token,
+        });
+        if (!made.id) throw new Error("Instagram did not make the carousel");
+        parent = made.id;
+      } else {
+        /* A container first, then publish it. Meta fetches the picture in between, which is why
+           the two calls are separate and why the URL has to stay reachable until it has. */
+        const made = await graph(`${user}/media`, { image_url: img, caption: post.caption || "", access_token: token });
+        if (!made.id) throw new Error("Instagram did not make the post container");
+        parent = made.id;
+      }
+
+      const out = await graph(`${user}/media_publish`, { creation_id: parent, access_token: token });
       const r = await fetch(`${GRAPH}/${out.id}?fields=permalink&access_token=${token}`, { signal: AbortSignal.timeout(60000) });
       link = ((await r.json()) as { permalink?: string }).permalink || "";
     } else {

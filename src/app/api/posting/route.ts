@@ -1,6 +1,6 @@
 import { getDb } from "@/lib/db";
 import { handle, ok, bad, readJson } from "@/lib/http";
-import { publishPost, publishable } from "@/lib/publish";
+import { publishPost, publishable, mediaFor, setMedia } from "@/lib/publish";
 
 export const runtime = "nodejs";
 
@@ -15,6 +15,9 @@ export const runtime = "nodejs";
 export type Ready = {
   id: string; platform: string; when: string; caption: string; notes: string;
   image_file_id: string | null; image_url: string | null;
+  /* Every picture on the post, in order. One of them for an ordinary post, several for a
+     carousel — the page needs to show the difference rather than quietly displaying slide one. */
+  slides: string[];
   slot_id: string | null; topic: string; late: boolean; status: string;
 };
 
@@ -39,6 +42,7 @@ export const GET = handle(async (req) => {
     notes: r.notes || "", status: r.status, slot_id: r.slot_id, topic: r.topic || "",
     image_file_id: r.image_file_id,
     image_url: r.image_file_id ? `/api/files/${r.image_file_id}` : null,
+    slides: mediaFor(r.id),
     late: r.scheduled_at.slice(0, 10) < today,
   }));
   return ok({ ready, late: ready.filter((r) => r.late).length, today, can: publishable() });
@@ -47,8 +51,13 @@ export const GET = handle(async (req) => {
 /* Recording that it went out. The live URL is the whole point: without it there is no evidence
    the post exists, and nothing to hang its numbers on later. */
 export const POST = handle(async (req) => {
-  const b = await readJson<{ action?: string; id?: string; posted_url?: string; caption?: string }>(req);
+  const b = await readJson<{ action?: string; id?: string; posted_url?: string; caption?: string; slides?: string[] }>(req);
   if (!b.id) return bad("id required");
+
+  if (b.slides) {
+    if (b.slides.length > 10) return bad("Instagram takes at most 10 slides");
+    setMedia(b.id, b.slides);
+  }
 
   /* Publishing happens because a person pressed the button on this post. There is deliberately
      no workflow node that does it unattended: it is public and it cannot be taken back. */

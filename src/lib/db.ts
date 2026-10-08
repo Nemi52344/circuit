@@ -28,6 +28,13 @@ CREATE TABLE IF NOT EXISTS sessions (
   expires_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+CREATE TABLE IF NOT EXISTS post_media (
+  post_id TEXT NOT NULL,
+  file_id TEXT NOT NULL,
+  position INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (post_id, file_id)
+);
+CREATE INDEX IF NOT EXISTS idx_post_media_post ON post_media(post_id, position);
 CREATE TABLE IF NOT EXISTS signoffs (
   post_id TEXT PRIMARY KEY,
   decision TEXT NOT NULL,

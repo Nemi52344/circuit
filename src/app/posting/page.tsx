@@ -125,6 +125,11 @@ export default function PostingPage() {
                 {r.image_file_id
                   ? <img src={fileUrl(r.image_file_id)} alt="" />
                   : <span className="muted small">no picture</span>}
+                {/* A five-slide post that looks identical to a one-slide post is how the wrong
+                    thing gets published. The count is on the picture. */}
+                {r.slides && r.slides.length > 1
+                  ? <span className="slide-count">{r.slides.length} slides</span>
+                  : null}
               </div>
               <div className="po-body stack" style={{ gap: 10 }}>
                 <div className="fact-top">
