@@ -27,6 +27,11 @@ export const POST = handle(async (req) => {
 
   if (!TEMPLATES.some((t) => t.id === b.template)) return bad("Pick a template");
   if (!SIZES[b.size]) return bad("Pick a size");
+  /* The preview comes first and is never validated. A blank form is a perfectly reasonable
+     thing to look at — it shows you the frame you are about to fill — and refusing it left the
+     studio opening on a white rectangle until you happened to type a number in the right box. */
+  if (b.preview) return new Response(posterHtml(b), { headers: { "Content-Type": "text/html; charset=utf-8" } });
+
   /* Each template is checked against what it actually cannot be drawn without, rather than one
      rule for all of them — a welcome card with no name is an empty circle, and a point slide
      is allowed either a figure or a claim. */
@@ -39,10 +44,6 @@ export const POST = handle(async (req) => {
     : ["fact", "statement", "cover", "hiring", "crew"].includes(b.template) && !has("headline") ? "a headline"
     : "";
   if (missing) return bad(`That template needs ${missing}`);
-
-  /* The preview is the same HTML the render prints, so what is on screen is what comes out —
-     rather than an approximation that drifts from it one edit at a time. */
-  if (b.preview) return new Response(posterHtml(b), { headers: { "Content-Type": "text/html; charset=utf-8" } });
 
   return ok(await makePoster(b, { slot_id: b.slot_id || null, title: b.title }), 201);
 });

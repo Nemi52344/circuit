@@ -27,7 +27,9 @@ type Spec = {
 
 const BLANK: Spec = {
   template: "load", size: "post",
-  eyebrow: "", number: "", unit: "", superscript: "+",
+  /* No superscript by default: on an empty form it drew a lone "+" floating where the number
+     is not yet, which looks like a rendering fault rather than an empty field. */
+  eyebrow: "", number: "", unit: "", superscript: "",
   headline: "", facts: ["", "", ""], photo_file_id: "",
   footnote: "Built in Coimbatore\nMade in India", source: "",
   name: "", role: "", place: "", counter: "", prompt: "",
@@ -65,7 +67,10 @@ export default function PosterPage() {
   }, [specKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const size = opts?.sizes[s.size];
-  const scale = useMemo(() => (size ? Math.min(1, 440 / size.w) : 0.4), [size]);
+  /* Fills the preview column rather than a fixed 440px, so the poster is big enough to judge
+     type on. Never above 1 — scaling a 1080px render up would show you something softer than
+     what gets printed. */
+  const scale = useMemo(() => (size ? Math.min(1, 512 / size.w) : 0.45), [size]);
 
   const make = async () => {
     setBusy(true);
@@ -101,7 +106,7 @@ export default function PosterPage() {
                 this does: sell the bike, carry a set, talk about the people. */}
             {["Product", "Carousel", "Crew"].map((g) => (
               <div key={g} style={{ marginBottom: 10 }}>
-                <div className="small muted" style={{ marginBottom: 6 }}>{g}</div>
+                <div className="tpl-group">{g}</div>
                 <div className="tpl-row">
                   {opts.templates.filter((t) => t.group === g).map((t) => (
                     <button key={t.id} type="button"
@@ -137,6 +142,11 @@ export default function PosterPage() {
               <label className="field">
                 <span className="eyebrow">Unit</span>
                 <input className="input" value={s.unit} placeholder="kg" onChange={(e) => set("unit", e.target.value)} />
+              </label>
+              <label className="field">
+                <span className="eyebrow">After the number <em className="muted">optional</em></span>
+                <input className="input" value={s.superscript} placeholder="+"
+                  onChange={(e) => set("superscript", e.target.value)} />
               </label>
             </div>
           ) : null}
