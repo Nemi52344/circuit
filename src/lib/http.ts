@@ -1,40 +1,76 @@
+import { randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
 import { userForRequest, anyUsers, type User } from "@/lib/auth";
 
 export const ok = (data: unknown, status = 200) => NextResponse.json(data, { status });
 export const bad = (error: string, status = 400) => NextResponse.json({ error }, { status });
 
-/* Routes that answer before anybody has signed in.
+/* An error meant for the person using Circuit.
 
-   Signing in obviously cannot require being signed in. /api/mcp is on the list because it is
-   not a person at all — it carries its own bearer key and is checked separately, and putting a
-   browser cookie in front of it would only break Mark. Health answers so the login screen can
-   say whether the app behind it is alive. */
+   Most of what goes wrong here is not a bug — a token without the right permission, a post
+   already published, a page that is not on this account. Those messages are the whole point
+   and must reach the browser intact. Anything else is a bug, and a bug's message is for the
+   log: it carries file paths, SQL and driver internals, none of which help the reader and all
+   of which help somebody who should not be reading it. */
+export class UserError extends Error {
+  status: number;
+  constructor(message: string, status = 400) {
+    super(message);
+    this.name = "UserError";
+    this.status = status;
+  }
+}
+
+/* Marks a thrown message as safe to show. Used where throwing is the natural control flow and
+   converting the whole call chain to UserError would be a bigger change than the fix. */
+export const userError = (message: string, status = 400) => new UserError(message, status);
+
+/* Does this look like something that escaped rather than something we wrote?
+
+   A belt to UserError's braces: the codebase throws plain Errors in hundreds of places, many
+   with messages worth reading. Rewriting all of them at once would be a worse risk than this
+   check, which catches the shapes that are never meant for a reader. */
+const INTERNAL = [
+  /SQLITE_/i, /no such (table|column)/i, /ENOENT|EACCES|EPERM|ECONN|ETIMEDOUT/,
+  /is not a function|undefined is not|cannot read propert/i,
+  /\/Users\/|\/private\/|\/var\/folders\//,
+];
+const looksInternal = (m: string) => INTERNAL.some((re) => re.test(m));
+
 const OPEN = new Set(["/api/auth", "/api/mcp", "/api/health"]);
-
 function isOpen(path: string): boolean {
   return OPEN.has(path) || [...OPEN].some((p) => path.startsWith(`${p}/`));
+}
+
+/* One line per failure, with everything needed to find it: which request, which route, and the
+   real message. The reader gets the reference and nothing else, so a support question starts
+   with "it said b3f91c" rather than "it said something went wrong". */
+function logFailure(ref: string, req: Request, e: unknown) {
+  const err = e instanceof Error ? e : new Error(String(e));
+  const path = (() => { try { return new URL(req.url).pathname; } catch { return "?"; } })();
+  console.error(`[api ${ref}] ${req.method} ${path} — ${err.message}`);
+  if (err.stack) console.error(err.stack.split("\n").slice(1, 4).join("\n"));
 }
 
 export function handle(fn: (req: Request, ctx: { params: Promise<Record<string, string>> }) => Promise<Response>) {
   return async (req: Request, ctx: { params: Promise<Record<string, string>> }) => {
     try {
       const path = new URL(req.url).pathname;
-      /* Before anyone has made an account, Circuit behaves as it always has — otherwise the
-         very first run would be a locked door with nobody able to open it. The moment a user
-         exists, every route needs a session. */
       if (!isOpen(path) && anyUsers() && !userForRequest(req)) return bad("Sign in to continue", 401);
       return await fn(req, ctx);
     } catch (e) {
+      if (e instanceof UserError) return bad(e.message, e.status);
       const msg = e instanceof Error ? e.message : String(e);
-      console.error("[api]", msg);
-      return bad(msg, 500);
+      const ref = randomBytes(3).toString("hex");
+      logFailure(ref, req, e);
+      /* A deliberate message still reaches the reader; an escaped one becomes a reference. */
+      return looksInternal(msg)
+        ? bad(`Something went wrong at our end. Reference ${ref}.`, 500)
+        : bad(msg, 500);
     }
   };
 }
 
-/* The same wrapper, for routes only an admin may call. The check lives here rather than in each
-   route because a forgotten check is invisible until somebody finds it. */
 export function handleAdmin(fn: (req: Request, user: User, ctx: { params: Promise<Record<string, string>> }) => Promise<Response>) {
   return handle(async (req, ctx) => {
     const user = userForRequest(req);
@@ -44,7 +80,6 @@ export function handleAdmin(fn: (req: Request, user: User, ctx: { params: Promis
   });
 }
 
-/* For routes that need to know who is asking but allow anyone signed in. */
 export function handleUser(fn: (req: Request, user: User, ctx: { params: Promise<Record<string, string>> }) => Promise<Response>) {
   return handle(async (req, ctx) => {
     const user = userForRequest(req);

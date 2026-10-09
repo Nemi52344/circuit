@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { migrate } from "@/lib/migrate";
 
 export const DATA_DIR = path.join(process.cwd(), "data");
 export const UPLOAD_DIR = path.join(DATA_DIR, "uploads");
@@ -519,40 +520,16 @@ export function getDb(): Database.Database {
     fs.mkdirSync(UPLOAD_DIR, { recursive: true });
     const db = new Database(path.join(DATA_DIR, "circuit.db"));
     db.pragma("journal_mode = WAL");
+    /* The CREATE block builds a new database in one go; the migrations replay everything that
+       came after it against an older one. Both are idempotent, but only the second is
+       recorded — so a database can now say which changes it has had, and a copy restored from
+       data/backups can be told apart from a fresh install. */
     db.exec(SCHEMA);
-    ensureColumn(db, "inspirations", "rights", "TEXT NOT NULL DEFAULT ''");
-    ensureColumn(db, "inspirations", "origin", "TEXT NOT NULL DEFAULT ''");
-    // drafts, iterations and posts all know which content slot they belong to
-    ensureColumn(db, "creations", "slot_id", "TEXT");
-    ensureColumn(db, "creations", "round", "INTEGER NOT NULL DEFAULT 0");
-    ensureColumn(db, "creations", "parent_id", "TEXT");
-    ensureColumn(db, "render_jobs", "slot_id", "TEXT");
-    ensureColumn(db, "render_jobs", "round", "INTEGER NOT NULL DEFAULT 0");
-    ensureColumn(db, "render_jobs", "parent_id", "TEXT");
-    ensureColumn(db, "render_jobs", "reference_file", "TEXT");
-    ensureColumn(db, "posts", "slot_id", "TEXT");
-    ensureColumn(db, "pillars", "weight", "INTEGER NOT NULL DEFAULT 20");
-    ensureColumn(db, "pillars", "platforms", "TEXT NOT NULL DEFAULT '[]'");
-    ensureColumn(db, "pillars", "examples", "TEXT NOT NULL DEFAULT '[]'");
-    // one queue for Claude text work: "research" (stage 2) and "copy" (captions for stage 7)
-    ensureColumn(db, "research_jobs", "kind", "TEXT NOT NULL DEFAULT 'research'");
-    ensureColumn(db, "render_jobs", "slide_id", "TEXT");
-    ensureColumn(db, "slot_slides", "bg_file_id", "TEXT");
-    ensureColumn(db, "research_jobs", "payload", "TEXT NOT NULL DEFAULT '{}'");
-    ensureColumn(db, "products", "source_path", "TEXT NOT NULL DEFAULT ''");
-    // the library doubles as the brand's own asset store: what a file is, and how to find it
-    ensureColumn(db, "files", "tags", "TEXT NOT NULL DEFAULT ''");
-    ensureColumn(db, "files", "title", "TEXT NOT NULL DEFAULT ''");
-    ensureColumn(db, "files", "brand", "INTEGER NOT NULL DEFAULT 0");
-    ensureColumn(db, "files", "poster_id", "TEXT");
+    const ran = migrate(db);
+    if (ran.length) console.log(`[db] applied ${ran.length} migration(s): ${ran.map((m) => `${m.id} ${m.name}`).join(", ")}`);
     global.__circuitDb = db;
   }
   return global.__circuitDb;
-}
-
-function ensureColumn(db: Database.Database, table: string, column: string, decl: string) {
-  const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
-  if (!cols.some((c) => c.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${decl}`);
 }
 
 export const now = () => new Date().toISOString();

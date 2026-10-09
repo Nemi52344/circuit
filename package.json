@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "next dev -p 3210",
     "build": "next build",
-    "start": "next start -p 3210"
+    "start": "next start -p 3210",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/",
+    "check": "npm run typecheck && npm run test"
   },
   "dependencies": {
     "better-sqlite3": "^12.0.0",

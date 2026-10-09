@@ -42,12 +42,10 @@ const rowFor = (id: string) =>
     SELECT p.id, p.platform, p.caption, p.scheduled_at, p.status, COALESCE(p.file_id, c.file_id) AS image
     FROM posts p LEFT JOIN creations c ON c.id = p.creation_id WHERE p.id = ?`).get(id) as Row | undefined;
 
-export function stateOf(id: string): PostState | null {
-  const r = rowFor(id);
-  if (!r) return null;
-  const s = getDb().prepare("SELECT * FROM signoffs WHERE post_id = ?").get(id) as Signoff | undefined;
+/* One post plus its decision, turned into the state the rest of the app reads. Kept apart from
+   the queries so the single-post path and the list path cannot drift. */
+function derive(r: Row, s: Signoff | undefined): PostState {
   const current = fingerprint(r.caption || "", r.image);
-
   const stale = Boolean(s && s.decision === "approved" && s.caption_hash !== current);
   const cleared = Boolean(s && s.decision === "approved" && !stale);
 
@@ -59,16 +57,35 @@ export function stateOf(id: string): PostState | null {
   return { ...r, signoff: s || null, stale, cleared, blocked_reason: blocked };
 }
 
-/* Everything an admin has been asked to look at, plus anything whose approval has gone stale. */
-export function waitingForSignoff(): PostState[] {
-  const ids = getDb().prepare("SELECT id FROM posts WHERE status != 'posted' ORDER BY scheduled_at").all() as { id: string }[];
-  return ids.map((r) => stateOf(r.id)).filter((s): s is PostState => Boolean(s) && !s!.cleared);
+export function stateOf(id: string): PostState | null {
+  const r = rowFor(id);
+  if (!r) return null;
+  const s = getDb().prepare("SELECT * FROM signoffs WHERE post_id = ?").get(id) as Signoff | undefined;
+  return derive(r, s);
 }
 
-export function signedOff(): PostState[] {
-  const ids = getDb().prepare("SELECT id FROM posts WHERE status != 'posted' ORDER BY scheduled_at").all() as { id: string }[];
-  return ids.map((r) => stateOf(r.id)).filter((s): s is PostState => Boolean(s) && s!.cleared);
+/* Every unpublished post with its decision, in two queries rather than two per post.
+
+   The first version called stateOf in a loop, which is fine at seventeen posts and visibly
+   slow at five hundred — and the queue is the one page somebody opens when they are in a
+   hurry. The derivation is shared with stateOf so a single post and the whole list can never
+   disagree about whether something is cleared. */
+function allStates(): PostState[] {
+  const db = getDb();
+  const rows = db.prepare(`
+    SELECT p.id, p.platform, p.caption, p.scheduled_at, p.status, COALESCE(p.file_id, c.file_id) AS image
+    FROM posts p LEFT JOIN creations c ON c.id = p.creation_id
+    WHERE p.status != 'posted' ORDER BY p.scheduled_at`).all() as Row[];
+  const signoffs = new Map(
+    (db.prepare("SELECT * FROM signoffs").all() as Signoff[]).map((s) => [s.post_id, s]),
+  );
+  return rows.map((r) => derive(r, signoffs.get(r.id)));
 }
+
+/* Everything an admin has been asked to look at, plus anything whose approval has gone stale. */
+export const waitingForSignoff = (): PostState[] => allStates().filter((s) => !s.cleared);
+
+export const signedOff = (): PostState[] => allStates().filter((s) => s.cleared);
 
 export function decide(postId: string, user: User, decision: Decision, note = ""): PostState {
   if (user.role !== "admin") throw new Error("Only an admin can sign a post off");

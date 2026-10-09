@@ -1,0 +1,22 @@
+name: check
+
+# Runs the same command a person runs before committing. If `npm run check` passes here and
+# fails locally, or the other way round, one of them is lying — so CI deliberately does not
+# have its own list of steps.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      # better-sqlite3 is a native module; the tests load it, so it has to build here too.
+      - run: npm ci
+      - run: npm run check
