@@ -210,8 +210,29 @@ export async function publishPost(postId: string): Promise<Published> {
       link = ((await r.json()) as { permalink?: string }).permalink || "";
     } else {
       const pg = await page();
-      const out = await graph(`${pg.id}/photos`, { url: img, caption: post.caption || "", access_token: pg.token });
-      link = out.id ? `https://www.facebook.com/${out.id}` : "";
+
+      if (slides.length > 1) {
+        /* Facebook does not have Instagram's carousel. Several pictures on one post is a
+           different shape entirely: each photo is uploaded unpublished, which gives it an id
+           and shows it to nobody, and then one feed post attaches them all.
+
+           Unpublished photos are swept by Facebook after about 24 hours, so they are uploaded
+           immediately before the post that claims them rather than prepared in advance. */
+        const ids: string[] = [];
+        for (const fid of slides) {
+          const url = await pictureUrl(fid);
+          const up = await graph(`${pg.id}/photos`, { url, published: "false", access_token: pg.token });
+          if (!up.id) throw new Error("Facebook did not accept one of the pictures");
+          ids.push(up.id);
+        }
+        const body: Record<string, string> = { message: post.caption || "", access_token: pg.token };
+        ids.forEach((id, i) => { body[`attached_media[${i}]`] = JSON.stringify({ media_fbid: id }); });
+        const out = await graph(`${pg.id}/feed`, body);
+        link = out.id ? `https://www.facebook.com/${out.id}` : "";
+      } else {
+        const out = await graph(`${pg.id}/photos`, { url: img, caption: post.caption || "", access_token: pg.token });
+        link = out.id ? `https://www.facebook.com/${out.id}` : "";
+      }
     }
 
     /* The live link is the evidence, so it is written down in the same breath as the publish. */
