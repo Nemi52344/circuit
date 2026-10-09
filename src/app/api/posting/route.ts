@@ -1,6 +1,6 @@
 import { getDb } from "@/lib/db";
 import { handle, ok, bad, readJson } from "@/lib/http";
-import { publishPost, publishable, mediaFor, setMedia } from "@/lib/publish";
+import { publishPost, publishable, mediaFor, setMedia, isVideo } from "@/lib/publish";
 
 export const runtime = "nodejs";
 
@@ -18,6 +18,9 @@ export type Ready = {
   /* Every picture on the post, in order. One of them for an ordinary post, several for a
      carousel — the page needs to show the difference rather than quietly displaying slide one. */
   slides: string[];
+  /* So the card can draw a video in a <video> rather than an <img>, which renders as a broken
+     image icon and looks like the file is missing. */
+  is_video: boolean;
   slot_id: string | null; topic: string; late: boolean; status: string;
 };
 
@@ -43,6 +46,7 @@ export const GET = handle(async (req) => {
     image_file_id: r.image_file_id,
     image_url: r.image_file_id ? `/api/files/${r.image_file_id}` : null,
     slides: mediaFor(r.id),
+    is_video: r.image_file_id ? isVideo(r.image_file_id) : false,
     late: r.scheduled_at.slice(0, 10) < today,
   }));
   return ok({ ready, late: ready.filter((r) => r.late).length, today, can: publishable() });

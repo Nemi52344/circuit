@@ -98,6 +98,13 @@ export function setMedia(postId: string, fileIds: string[]) {
 /* Instagram takes 2 to 10, and it is Meta's limit rather than ours. */
 export const CAROUSEL_MAX = 10;
 
+/* A reel is a post with a video on it rather than a separate kind of thing — but Meta does
+   treat it separately, so the publishing path has to know which it is holding. */
+export function isVideo(fileId: string): boolean {
+  const row = getFile(fileId);
+  return Boolean(row && row.mime.startsWith("video/"));
+}
+
 /* The picture, somewhere Meta can fetch it from. */
 async function pictureUrl(fileId: string): Promise<string> {
   const row = getFile(fileId);
@@ -143,6 +150,27 @@ async function page(): Promise<{ id: string; token: string; name: string }> {
     if (owner) return { id: owner.id, token: owner.access_token, name: owner.name };
   }
   throw new Error(`Set which Facebook page to post to — this token reaches: ${names()}`);
+}
+
+
+/* Waits for Meta to finish with a video container.
+
+   An image container is ready as soon as the call returns. A video is not: Meta fetches it,
+   transcodes it and only then marks the container FINISHED, which for a short reel is usually
+   seconds but is not promised to be. Publishing before that fails with an unhelpful error, so
+   this asks until it is told, and gives up rather than hanging forever. */
+async function waitForContainer(id: string, token: string, seconds = 180): Promise<void> {
+  const until = Date.now() + seconds * 1000;
+  let last = "";
+  while (Date.now() < until) {
+    const r = await fetch(`${GRAPH}/${id}?fields=status_code,status&access_token=${token}`, { signal: AbortSignal.timeout(30000) });
+    const j = (await r.json()) as { status_code?: string; status?: string };
+    last = j.status_code || "";
+    if (last === "FINISHED") return;
+    if (last === "ERROR") throw new Error(`Instagram could not process the video: ${j.status || "no reason given"}`);
+    await new Promise((f) => setTimeout(f, 3000));
+  }
+  throw new Error(`Instagram is still processing the video after ${seconds}s (last status: ${last || "unknown"})`);
 }
 
 export type Published = { ok: boolean; url: string; error: string; platform: string };
@@ -197,6 +225,15 @@ export async function publishPost(postId: string): Promise<Published> {
         });
         if (!made.id) throw new Error("Instagram did not make the carousel");
         parent = made.id;
+      } else if (isVideo(slides[0])) {
+        /* Instagram has no "video post" any more — a video is a reel, and it says so with
+           media_type. The container then has to be waited for. */
+        const made = await graph(`${user}/media`, {
+          media_type: "REELS", video_url: img, caption: post.caption || "", access_token: token,
+        });
+        if (!made.id) throw new Error("Instagram did not make the reel container");
+        await waitForContainer(made.id, token);
+        parent = made.id;
       } else {
         /* A container first, then publish it. Meta fetches the picture in between, which is why
            the two calls are separate and why the URL has to stay reachable until it has. */
@@ -228,6 +265,10 @@ export async function publishPost(postId: string): Promise<Published> {
         const body: Record<string, string> = { message: post.caption || "", access_token: pg.token };
         ids.forEach((id, i) => { body[`attached_media[${i}]`] = JSON.stringify({ media_fbid: id }); });
         const out = await graph(`${pg.id}/feed`, body);
+        link = out.id ? `https://www.facebook.com/${out.id}` : "";
+      } else if (isVideo(slides[0])) {
+        /* Facebook keeps video on its own edge; /photos would simply refuse it. */
+        const out = await graph(`${pg.id}/videos`, { file_url: img, description: post.caption || "", access_token: pg.token });
         link = out.id ? `https://www.facebook.com/${out.id}` : "";
       } else {
         const out = await graph(`${pg.id}/photos`, { url: img, caption: post.caption || "", access_token: pg.token });

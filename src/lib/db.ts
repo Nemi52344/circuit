@@ -554,6 +554,10 @@ const SAFE_EXT: Record<string, string> = {
   "image/webp": "webp",
   "image/gif": "gif",
   "image/svg+xml": "svg",
+  /* Video, because a reel is a post too. The extension matters: Meta and Supabase both decide
+     what a file is from it, and a .bin lands as a download rather than a video. */
+  "video/mp4": "mp4",
+  "video/quicktime": "mov",
 };
 
 export function saveFileBuffer(buf: Buffer, name: string, mime: string, kind = "upload"): FileRow {

@@ -122,14 +122,15 @@ export default function PostingPage() {
           {d.ready.map((r) => (
             <section key={r.id} className={`panel post-out ${r.late ? "late" : ""}`}>
               <div className="po-pic">
-                {r.image_file_id
-                  ? <img src={fileUrl(r.image_file_id)} alt="" />
-                  : <span className="muted small">no picture</span>}
+                {!r.image_file_id ? <span className="muted small">no picture</span>
+                  : r.is_video
+                    ? <video src={fileUrl(r.image_file_id)} muted playsInline preload="metadata" />
+                    : <img src={fileUrl(r.image_file_id)} alt="" />}
                 {/* A five-slide post that looks identical to a one-slide post is how the wrong
                     thing gets published. The count is on the picture. */}
                 {r.slides && r.slides.length > 1
                   ? <span className="slide-count">{r.slides.length} slides</span>
-                  : null}
+                  : r.is_video ? <span className="slide-count">reel</span> : null}
               </div>
               <div className="po-body stack" style={{ gap: 10 }}>
                 <div className="fact-top">
