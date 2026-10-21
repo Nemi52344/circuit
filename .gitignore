@@ -7,6 +7,11 @@ node_modules
 # repository, public or private.
 data/circuit.db*
 
+# The accounts database, which arrived when brands were split out. It holds every password
+# hash and every live session token — the one file in here that is worth more than the rest
+# put together. It was not covered by the line above, because that line names circuit.db.
+data/accounts.db*
+
 # Backups are copies of that same database, with the same secrets inside them.
 data/backups/
 
@@ -38,3 +43,6 @@ public/PRD.html
 campaign/reel/node_modules/
 campaign/reel/.hyperframes/
 campaign/reel/renders/frames/
+
+# A live password-recovery code. Short-lived, deleted on use, and never committed.
+data/recovery-code.txt
