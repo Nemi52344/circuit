@@ -238,6 +238,9 @@ a.kpi:hover { border-color: var(--line-strong); box-shadow: var(--shadow); }
 .card .thumb { aspect-ratio: 4 / 5; background: var(--surface-2); position: relative; overflow: hidden; }
 .card .thumb.square { aspect-ratio: 1; }
 .card .thumb img { width: 100%; height: 100%; object-fit: contain; }
+/* A reel fills its thumb the way a still does. Without this the <video> brought its own
+   intrinsic size along and pushed the grid track out to one card per row. */
+.card .thumb video { width: 100%; height: 100%; object-fit: contain; background: #000; display: block; }
 .card .thumb .tag { position: absolute; top: 8px; left: 8px; z-index: 4; }
 .card .body { padding: 12px 14px 14px; display: grid; gap: 5px; }
 .card .body strong { font-size: 14px; font-weight: 600; line-height: 1.3; }
@@ -245,7 +248,12 @@ a.kpi:hover { border-color: var(--line-strong); box-shadow: var(--shadow); }
 .card .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
 
 /* reference cards: the whole image shows; details slide in on hover */
-.card.reveal .thumb { aspect-ratio: 1; }
+/* Saved social posts are portrait far more often than square — reels are 9:16, feed posts
+   4:5 — so a square tile spent most of itself on bars with the picture stranded in the middle.
+   A 4:5 tile is close to what the content actually is, and filling it crops a sliver rather
+   than letterboxing the lot. The whole frame is still one click away in the viewer. */
+.card.reveal .thumb { aspect-ratio: 4 / 5; }
+.card.reveal .thumb img, .card.reveal .thumb video { object-fit: cover; }
 .card.reveal .body {
   position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; max-height: 100%; overflow: hidden;
   padding: 26px 12px 12px; align-content: end;
@@ -253,6 +261,21 @@ a.kpi:hover { border-color: var(--line-strong); box-shadow: var(--shadow); }
   opacity: 0; transform: translateY(6px); transition: opacity .16s, transform .16s; pointer-events: none;
 }
 .card.reveal:hover .body, .card.reveal:focus-within .body { opacity: 1; transform: none; pointer-events: auto; }
+
+/* A card holding a reel keeps the same shape as every other card, so the grid stays even.
+   The only concession it needs is that the overlay stops short of the play bar — the overlay
+   is pinned to the bottom, which is exactly where the controls are, and it would otherwise
+   swallow every click meant for them. */
+.card.reveal.has-video .body { bottom: 40px; }
+.card.reveal.has-video .body::after {
+  /* A soft edge where the overlay ends, so it reads as a panel above the controls rather
+     than as a panel that has been cut off. */
+  content: ""; position: absolute; left: 0; right: 0; bottom: -14px; height: 14px;
+  background: linear-gradient(to bottom, rgba(17,19,18,.94), rgba(17,19,18,0));
+}
+/* No z-index games are needed: the overlay simply does not reach the bottom 40px, so the
+   control bar is never covered and keeps receiving its own clicks. Putting the video above
+   the overlay instead would hide the words it is there to show. */
 .card.reveal .body strong { color: #F4F2EC; font-size: 13px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .card.reveal .body p, .card.reveal .body .rights { color: rgba(244,242,236,.78); font-size: 12px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .card.reveal .body .btn { min-height: 26px; padding: 0 9px; font-size: 12px; background: transparent; border-color: rgba(244,242,236,.45); color: #F4F2EC; }
@@ -1088,7 +1111,12 @@ h2 { font-size: 27px; letter-spacing: -.025em; }
    Work, Admin, Finance and Reports are all rows of numbers. Numbers want tabular figures, a
    right edge to line up on, and nothing else competing for attention. */
 
-.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin-bottom: 4px; overflow-x: auto; }
+/* One line that scrolls, never two that wrap. This rule always meant to scroll — it sets
+   overflow-x — but it never reset the flex-wrap it inherited, so eight tabs broke onto a
+   second row and took 90px of the first screen instead of 45. */
+.tabs { display: flex; flex-wrap: nowrap; gap: 2px; border-bottom: 1px solid var(--line); margin-bottom: 4px; overflow-x: auto; scrollbar-width: thin; }
+.tabs::-webkit-scrollbar { height: 4px; }
+.tabs::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 4px; }
 .tabs button {
   appearance: none; background: none; border: 0; border-bottom: 2px solid transparent;
   padding: 9px 14px; font: inherit; font-size: 14px; font-weight: 500; color: var(--muted);
@@ -1575,8 +1603,12 @@ table.data tr.total td { background: rgba(242, 243, 241, .9); border-top-color: 
 .hw-count i { font-style: normal; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; font-size: 10.5px; }
 
 @media (max-width: 980px) {
-  .hero-world { grid-template-columns: 1fr; padding: 40px 30px 300px; min-height: 0; }
-  .hw-globe { right: -10%; bottom: -24%; width: 120%; }
+  .hero-world { grid-template-columns: 1fr; padding: 40px 30px 260px; min-height: 0; }
+  /* Sized to the padding reserved for it at the foot, and no larger. Setting a width and
+     letting aspect-ratio pick the height grew the world to 120% of the panel, so its pale
+     body ended up behind the white headline and swallowed it whole between 641 and 980px.
+     An explicit height means its top can never climb above the text. */
+  .hw-globe { right: -8%; left: auto; bottom: -40px; width: 300px; height: 300px; aspect-ratio: auto; }
 }
 /* A world that will not stop turning is a problem for some people, so it stops. */
 @media (prefers-reduced-motion: reduce) {
@@ -1778,6 +1810,11 @@ table.data tr.total td { background: rgba(242, 243, 241, .9); border-top-color: 
   margin: 0; padding: 11px 14px; border-left: 3px solid var(--line-strong);
   background: rgba(242, 243, 241, .7); border-radius: 0 var(--r-sm) var(--r-sm) 0;
   font-size: 14.5px; line-height: 1.5; color: var(--ink);
+  /* Somebody else wrote this, so it cannot be trusted to contain spaces. One spam comment with
+     an unbroken run of characters pushed the whole Listening page 87px sideways at 400px —
+     the only screen in the app that scrolled horizontally on a phone. Normal wrapping cannot
+     break a word that has no break in it; this can. */
+  overflow-wrap: anywhere; word-break: break-word; min-width: 0;
 }
 :root[data-theme="dark"] .said { background: rgba(255, 255, 255, .04); }
 
@@ -1938,3 +1975,288 @@ table.data tr.total td { background: rgba(242, 243, 241, .9); border-top-color: 
 /* A video in the queue is framed exactly like a picture — same box, same corners. A reel that
    renders at a different size from the posters around it reads as a mistake. */
 .po-pic video { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* Which brand's books are open. Sits beside the product pill in the top bar, and only appears
+   once there is more than one brand to choose between. */
+.brand-switch {
+  height: 34px; padding: 0 28px 0 10px; border: 1px solid var(--line-strong);
+  background: var(--surface); color: var(--ink); font-family: var(--font-body);
+  font-size: 13px; font-weight: 500; border-radius: var(--r-xs); cursor: pointer;
+  appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 15px) 15px, calc(100% - 10px) 15px; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat;
+}
+.brand-switch:disabled { opacity: .6; cursor: default; }
+
+/* The four checks a picture passes before it may be approved. On the card, not behind a
+   dialog: a checklist you have to go looking for is a checklist that gets ticked blind. */
+.qa { display: grid; gap: 3px; margin: 6px 0 2px; }
+.qa-item { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--text-dim); cursor: pointer; }
+.qa-item input { accent-color: var(--emerald); width: 14px; height: 14px; flex: none; cursor: pointer; }
+.qa-item input:disabled { cursor: default; }
+.qa-item:has(input:checked) { color: var(--ink); }
+
+/* Where the platform's own furniture — caption gradient, profile row, buttons — will sit over
+   the picture. Drawn over the preview while you judge it and never written into the file: a
+   safe-area box baked into an export is exactly the thing that ends up published. */
+.safe-wrap { position: relative; display: inline-block; max-width: 100%; }
+.safe-wrap .safe {
+  position: absolute; inset: 0; pointer-events: none;
+  border-style: dashed; border-color: rgba(201, 242, 76, .85); border-width: 0;
+}
+.safe-wrap .safe::before {
+  content: ""; position: absolute; left: var(--safe-side); right: var(--safe-side);
+  top: var(--safe-top); bottom: var(--safe-bottom);
+  border: 1.5px dashed rgba(201, 242, 76, .9); border-radius: 2px;
+}
+.safe-wrap .safe::after {
+  content: "text-safe"; position: absolute; left: var(--safe-side); top: calc(var(--safe-top) + 4px);
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: .14em; text-transform: uppercase;
+  color: rgba(201, 242, 76, .9); background: rgba(10, 12, 10, .6); padding: 1px 4px;
+}
+
+/* The Video tab shows its words beneath the picture rather than over it, because browsing
+   reels is reading: you want the competitor and the caption while you scan. The cost is that
+   a long caption makes a tall card and the rows stop lining up, so each part is clamped to a
+   fixed number of lines. Every card is then the same height and the grid reads as a grid. */
+.card.vcard .body { min-height: 122px; align-content: start; }
+.card.vcard .body strong,
+.card.vcard .body > span { overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; }
+.card.vcard .body strong { -webkit-line-clamp: 2; }
+.card.vcard .body > span { -webkit-line-clamp: 1; }
+.card.vcard .body .row { margin-top: auto; }
+
+/* A row of icon buttons on a card overlay. Square, quiet, and all on one line — the words
+   they replace took three lines and most of the picture. The hit area is 30px, which is
+   small for a finger but these only appear on hover, which is a pointer by definition. */
+.icon-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 2px; }
+.ibtn {
+  width: 30px; height: 30px; display: grid; place-items: center; flex: none;
+  border: 1px solid rgba(244, 242, 236, .4); background: rgba(244, 242, 236, .08);
+  color: #F4F2EC; border-radius: var(--r-xs); cursor: pointer; padding: 0;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.ibtn:hover { background: rgba(244, 242, 236, .2); border-color: rgba(244, 242, 236, .75); }
+.ibtn.primary { background: var(--emerald); border-color: var(--emerald); color: #FFFFFF; }
+.ibtn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.ibtn.danger:hover { background: rgba(192, 57, 43, .9); border-color: rgba(192, 57, 43, .9); color: #FFFFFF; }
+.ibtn svg { display: block; }
+
+/* On the Video tab the icons sit on a pale card rather than over a picture, so they need the
+   page's own ink instead of the overlay's bone. */
+.card.vcard .ibtn { border-color: var(--line-strong); background: var(--surface); color: var(--text-dim); }
+.card.vcard .ibtn:hover { background: var(--surface-2); border-color: var(--ink); color: var(--ink); }
+.card.vcard .ibtn.primary { background: var(--emerald); border-color: var(--emerald); color: #FFFFFF; }
+.card.vcard .ibtn.danger:hover { background: rgba(192, 57, 43, .9); border-color: rgba(192, 57, 43, .9); color: #FFFFFF; }
+
+/* A wall of saved posts, each at the shape it was actually made in.
+
+   Laid out in columns rather than rows: once a reel is 9:16 and a pin is 2:3, a row grid
+   makes every row as tall as its tallest card and fills the difference with nothing. Columns
+   let each card take only the height it needs and the next one start immediately beneath —
+   which is how every swipe file worth using behaves. */
+.insp-wall { column-count: 5; column-gap: 12px; }
+.insp-wall > .card { break-inside: avoid; margin: 0 0 12px; display: block; width: 100%; }
+/* The shape is set per card, so the blanket rule must not override it. */
+.insp-wall > .card.reveal .thumb { aspect-ratio: auto; }
+@media (max-width: 1500px) { .insp-wall { column-count: 4; } }
+@media (max-width: 1180px) { .insp-wall { column-count: 3; } }
+@media (max-width: 860px)  { .insp-wall { column-count: 2; } }
+@media (max-width: 560px)  { .insp-wall { column-count: 1; } }
+
+/* What a picture may be used for, on its card in the library. Deliberately plain and always
+   visible: a rights line that only appears when you go looking for it is a rights line that
+   gets forgotten the one time it mattered. */
+.rights-line {
+  font-size: 11.5px; line-height: 1.35; color: var(--text-dim);
+  border-left: 2px solid var(--line-strong); padding-left: 7px; margin: 2px 0 0;
+}
+
+/* A published post that has been set aside: still listed, still true, but no longer teaching
+   the app anything. Dimmed rather than hidden, because hiding it would make the decision
+   invisible and the next person would wonder why the advice ignores an obvious hit. */
+.data tr.set-aside { opacity: .55; }
+.judge-thumb { width: 42px; height: 42px; object-fit: cover; border-radius: var(--r-xs); display: block; }
+
+/* ---- calendar: week view, and dragging a post to a new slot ---- */
+
+/* Two views of one calendar, picked with one control rather than two buttons that both look
+   pressable when only one is on. */
+.seg { display: inline-flex; border: 1px solid var(--line-strong); overflow: hidden; }
+.seg-btn { min-height: 38px; padding: 0 14px; border: 0; background: var(--surface); color: var(--text-dim);
+  font: inherit; font-size: 13.5px; cursor: pointer; }
+.seg-btn + .seg-btn { border-left: 1px solid var(--line); }
+.seg-btn:hover { color: var(--ink); }
+.seg-btn.on { background: var(--accent-soft); color: var(--accent-text); font-weight: 600; }
+
+/* The hour grid. One pixel of gap showing the backing colour draws every line, so no cell needs
+   a border of its own and nothing doubles up at the joins. */
+.weekgrid { display: grid; grid-template-columns: 56px repeat(7, minmax(0, 1fr)); gap: 1px;
+  background: var(--line); border: 1px solid var(--line); }
+.weekgrid > * { background: var(--surface); }
+.wg-corner { min-height: 44px; }
+.wg-dayhead { padding: 6px 8px; display: grid; gap: 1px; align-content: center; }
+.wg-dayhead strong { font-size: 13.5px; font-weight: 600; }
+.wg-dayhead.today { background: var(--accent-soft); color: var(--accent-text); }
+.wg-dayhead.today .muted { color: var(--accent-text); opacity: .75; }
+.wg-hour { padding: 5px 8px 0 0; text-align: right; font-size: 11.5px; color: var(--muted);
+  font-variant-numeric: tabular-nums; }
+.wg-cell { min-height: 36px; padding: 3px; display: grid; gap: 3px; align-content: start; }
+.wg-cell.past { background: var(--surface-2); }
+
+/* Where it would land. Shown on the cell under the cursor, in both views, so a drop is never
+   a guess about which day was meant. */
+.wg-cell.drop, .calendar .day.drop { background: var(--accent-soft); box-shadow: inset 0 0 0 2px var(--emerald); }
+.evt[draggable="true"] { cursor: grab; }
+.evt[draggable="true"]:active { cursor: grabbing; }
+.evt.dragging { opacity: .35; }
+
+@media (max-width: 860px) {
+  /* Seven columns of hours do not fit a phone. The grid scrolls sideways rather than crushing
+     each day to the width of a word. */
+  .weekgrid { min-width: 720px; }
+  .panel:has(> .weekgrid) { overflow-x: auto; }
+}
+
+/* A week card says the minutes and the platform on two lines of its own, rather than one line
+   that wraps wherever the column happens to end. */
+.evt.wk { display: grid; gap: 0; line-height: 1.3; white-space: normal; padding: 4px 6px; }
+.evt.wk small { font-size: 10.5px; opacity: .72; font-variant-numeric: tabular-nums; }
+.evt.wk span { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---- a creation's notes and the versions it came from ---- */
+
+/* One quiet line on an already-busy card. It is a button because it opens something, and it
+   looks like text because it is not the action anybody came to the card for. */
+.chain-line { display: flex; align-items: center; gap: 6px; padding: 3px 0; border: 0; background: none;
+  font: inherit; font-size: 12px; color: var(--muted); cursor: pointer; text-align: left; }
+.chain-line:hover { color: var(--accent-text); }
+.vtag { font-size: 10.5px; font-weight: 600; letter-spacing: .04em; padding: 1px 5px;
+  background: var(--accent-soft); color: var(--accent-text); }
+
+.chain { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+.chain-step { display: grid; gap: 4px; padding: 7px 9px; border: 1px solid var(--line); background: var(--surface-2); }
+.chain-step-label { font-size: 11.5px; font-weight: 600; color: var(--text-dim); }
+.chain-step small { font-size: 11px; }
+.chain-row { display: flex; gap: 5px; flex-wrap: wrap; }
+.chain-item { position: relative; display: block; line-height: 0; }
+.chain-item img { width: 44px; height: 44px; object-fit: cover; border: 1px solid var(--line); background: var(--surface); }
+.chain-item.now img { border-color: var(--emerald); box-shadow: 0 0 0 2px var(--accent-soft); }
+/* How many notes sit on that attempt — the badge is where the argument was. */
+.chain-notes { position: absolute; top: -5px; right: -5px; min-width: 16px; height: 16px; padding: 0 4px;
+  background: var(--accent); color: #FFFFFF; font-size: 10px; font-weight: 600; line-height: 16px;
+  text-align: center; border-radius: 8px; }
+.chain-arrow { color: var(--muted); font-style: normal; align-self: center; }
+
+.notes { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); }
+.note-row { display: flex; gap: 10px; align-items: start; justify-content: space-between;
+  background: var(--surface); padding: 9px 11px; }
+.note-row p { margin: 3px 0 0; font-size: 13.5px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* A tagged link is read character by character when somebody is checking it, so it is set in
+   the mono face and allowed to break anywhere rather than running off the side. */
+.tagged { display: block; font-family: var(--font-mono); font-size: 11.5px; line-height: 1.5;
+  color: var(--text-dim); overflow-wrap: anywhere; word-break: break-all; }
+
+/* ---- the front page's Instagram panel ---- */
+
+.ig-nums { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.ig-nums div { display: grid; gap: 2px; }
+.ig-nums strong { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1; }
+/* A fall is said in words by the label beside it; the colour only has to stop it reading as a
+   win at a glance. */
+.ig-nums strong.down { color: var(--ink); }
+.ig-nums small { font-size: 11.5px; color: var(--muted); line-height: 1.35; }
+
+.ig-split { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+
+.ig-best { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 14px; align-items: start;
+  padding: 12px; border: 1px solid var(--line); background: var(--surface-2); color: inherit; text-decoration: none; }
+.ig-best:hover { border-color: var(--line-strong); }
+.ig-best img { width: 112px; height: 112px; object-fit: cover; border: 1px solid var(--line); background: var(--surface); }
+.ig-best-nopic { display: grid; place-items: center; width: 112px; height: 112px; border: 1px dashed var(--line-strong);
+  font-size: 11px; color: var(--muted); text-align: center; padding: 8px; }
+.ig-best strong { display: block; font-size: 19px; font-weight: 600; margin: 2px 0 4px; }
+.ig-best p { margin: 0 0 6px; font-size: 13px; line-height: 1.5; color: var(--text-dim); overflow-wrap: anywhere; }
+.ig-best small { font-size: 11.5px; color: var(--muted); }
+
+.ig-formats { display: grid; gap: 10px; align-content: start; }
+.ig-bar { display: grid; gap: 3px; }
+.ig-bar-top { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; }
+.ig-bar-top b { font-weight: 600; }
+.ig-bar-top i { font-style: normal; font-variant-numeric: tabular-nums; color: var(--text-dim); }
+.ig-bar-track { display: block; height: 7px; background: var(--surface-2); border: 1px solid var(--line); }
+.ig-bar-track i { display: block; height: 100%; background: var(--emerald); }
+.ig-bar small { font-size: 11px; color: var(--muted); }
+
+@media (max-width: 900px) {
+  .ig-nums { grid-template-columns: repeat(2, 1fr); }
+  .ig-split { grid-template-columns: 1fr; }
+}
+@media (max-width: 520px) {
+  .ig-best { grid-template-columns: 1fr; }
+  .ig-best img, .ig-best-nopic { width: 100%; height: 160px; }
+}
+
+/* ---- charts ---- */
+
+.chart { display: grid; gap: 6px; }
+.chart svg { display: block; max-width: 100%; overflow: visible; }
+.c-grid { stroke: var(--line); stroke-width: 1; }
+.c-axis { fill: var(--muted); font-size: 11px; font-family: var(--font-mono); }
+.c-line { fill: none; stroke: var(--emerald); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round;
+  vector-effect: non-scaling-stroke; }
+.c-fill-top { stop-color: var(--emerald); stop-opacity: .22; }
+.c-fill-bottom { stop-color: var(--emerald); stop-opacity: 0; }
+.c-dot { fill: var(--emerald); transition: r .1s; }
+/* Hollow means the number underneath it is built on too few posts to lean on. */
+.c-dot.thin { fill: var(--surface); stroke: var(--emerald); stroke-width: 2; }
+.c-dot.on { fill: var(--ink); }
+.c-dot.thin.on { fill: var(--surface); stroke: var(--ink); }
+
+.c-read { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; min-height: 20px; font-size: 12.5px; }
+.c-read b { font-weight: 600; }
+.c-read span { color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.c-read i { font-style: normal; font-size: 11.5px; color: var(--muted); }
+.c-read i.c-warn { color: var(--ink); }
+
+.ig-chart { display: grid; gap: 8px; padding-top: 4px; }
+.ig-chart-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.ig-chart-head .seg-btn { min-height: 30px; padding: 0 11px; font-size: 12.5px; }
+
+/* ---- choosing the picture a repeating post starts from ---- */
+
+.pick { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 14px; align-items: start; }
+.pick-now { display: grid; place-items: center; width: 132px; height: 132px;
+  border: 1px solid var(--line); background: var(--surface-2); overflow: hidden; }
+.pick-now img { width: 100%; height: 100%; object-fit: cover; }
+.pick-none { font-size: 11.5px; color: var(--muted); text-align: center; padding: 10px; line-height: 1.4; }
+.pick-list { display: grid; gap: 9px; }
+/* Scrolls rather than growing: sixty pictures would push the rest of the form off the screen. */
+.pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 5px;
+  max-height: 168px; overflow-y: auto; padding: 2px; }
+.pick-item { padding: 0; border: 1px solid var(--line); background: var(--surface-2); cursor: pointer;
+  aspect-ratio: 1; overflow: hidden; line-height: 0; }
+.pick-item img { width: 100%; height: 100%; object-fit: cover; }
+.pick-item:hover { border-color: var(--line-strong); }
+.pick-item.on { border-color: var(--emerald); box-shadow: 0 0 0 2px var(--accent-soft); }
+.pick-vid { display: grid; place-items: center; width: 100%; height: 100%; font-size: 10px; color: var(--muted); }
+
+/* The series row shows what it will put on every draft, so a wrong picture is spotted on the
+   list rather than eight drafts later. */
+.sr-name { display: flex; gap: 9px; align-items: start; }
+.sr-pic { width: 34px; height: 34px; object-fit: cover; border: 1px solid var(--line); flex: none; }
+
+@media (max-width: 560px) {
+  .pick { grid-template-columns: 1fr; }
+  .pick-now { width: 100%; height: 150px; }
+}
+
+/* Where the skills were read from. Shown rather than assumed: a folder that is not there and a
+   folder with nothing in it look identical in a list of skills. */
+.roots { display: flex; flex-wrap: wrap; gap: 8px; }
+.root { display: inline-flex; align-items: baseline; gap: 7px; padding: 4px 9px;
+  border: 1px solid var(--line); background: var(--surface-2); font-size: 11.5px; }
+.root code { font-family: var(--font-mono); color: var(--text-dim); }
+.root i { font-style: normal; color: var(--muted); }
+.root.gone { opacity: .6; }
+.root.gone i { color: var(--ink); }

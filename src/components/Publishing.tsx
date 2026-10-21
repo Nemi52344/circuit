@@ -75,8 +75,8 @@ export function PublishingPanel({ push }: { push: (t: string, tone?: string) => 
       {!st.connected || showKey ? (
         <div className="stack" style={{ gap: 8 }}>
           <div className="form-grid">
-            <input className="input" id="postiz-key" type="password" placeholder="Postiz API key" autoComplete="off" />
-            <input className="input" id="postiz-url" placeholder="Your own server's address, if self-hosted" defaultValue={st.self_hosted ? st.base : ""} autoComplete="off" />
+            <input className="input" id="postiz-key" type="password" placeholder="Postiz API key" aria-label="Postiz API key" autoComplete="off" />
+            <input className="input" id="postiz-url" placeholder="Your own server's address, if self-hosted" aria-label="Postiz server address" defaultValue={st.self_hosted ? st.base : ""} autoComplete="off" />
           </div>
           <div className="actions">
             <button className="btn primary" type="button" disabled={Boolean(busy)} onClick={connect}>{busy === "connect" ? "Checking…" : "Connect"}</button>

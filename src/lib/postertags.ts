@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { getDb, getFile, newId, now, UPLOAD_DIR } from "@/lib/db";
+import { getDb, getFile, newId, now, uploadDir } from "@/lib/db";
 import { runChatGptJson } from "@/lib/chatgpt";
 
 /* Why a poster worked, not just that it did.
@@ -64,7 +64,7 @@ export async function tagPosters(limit = 6): Promise<{ tagged: number; skipped: 
   for (const p of todo) {
     const f = getFile(p.file_id);
     // files are stored by name inside the uploads folder, so the full path is built here
-    const full = f ? path.join(UPLOAD_DIR, f.path) : "";
+    const full = f ? path.join(uploadDir(), f.path) : "";
     if (!f || !fs.existsSync(full)) { out.skipped++; continue; }
     paths.push(full);
     order.push({ id: p.id, ig_id: p.ig_id });

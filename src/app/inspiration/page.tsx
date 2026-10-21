@@ -28,6 +28,7 @@ const FORMATS = ["Static post", "Carousel", "Story", "Reel cover", "Banner", "Pr
 const RIGHTS = "Third-party. Reference only, do not publish.";
 const BOXES = [
   { key: "all", label: "All" },
+  { key: "video", label: "Video" },
   { key: "pinterest", label: "Pinterest" },
   { key: "ads", label: "Ads" },
   { key: "competitors", label: "Competitors" },
@@ -36,6 +37,15 @@ const BOXES = [
   { key: "folder", label: "Folder" },
 ] as const;
 type BoxKey = (typeof BOXES)[number]["key"];
+
+/* A reel, a video post, or anything whose stored file is actually a video. The format string
+   is what Instagram told us at sync time; the mime is the ground truth for things imported by
+   hand, where nobody typed a format. */
+const MOVING_FORMATS = new Set(["reel", "video", "reel cover"]);
+const isMoving = (i: Inspiration) =>
+  Boolean(i.video_file_id) ||
+  MOVING_FORMATS.has((i.format || "").trim().toLowerCase()) ||
+  Boolean(i.mime && i.mime.startsWith("video/"));
 
 const adLibraryUrl = (name: string) => `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=IN&q=${encodeURIComponent(name)}&search_type=keyword_unordered&media_type=all`;
 const igUrl = (h: string) => (h ? (h.startsWith("http") ? h : `https://www.instagram.com/${h.replace(/^@/, "")}/`) : "");
@@ -46,6 +56,51 @@ const summarise = (r: ImportResult) => {
   if (r.errors.length) bits.push(`${r.errors.length} failed: ${r.errors[0].error}`);
   return bits.join(" · ");
 };
+
+
+/* Four small line icons, drawn here rather than pulled from a library: the app already draws
+   its own, and a whole icon package for four glyphs is a dependency nobody needs. Each is
+   marked aria-hidden because the button around it carries the name. */
+const IconWand = () => (
+  <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
+    <path d="M9.5 2.5 13.5 6.5 6 14H2v-4z" /><path d="M11 1v2M14.5 4.5h-2M12.8 2.2l-1.4 1.4" />
+  </svg>
+);
+const IconEye = () => (
+  <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+    <path d="M1 8s2.6-4.5 7-4.5S15 8 15 8s-2.6 4.5-7 4.5S1 8 1 8z" /><circle cx="8" cy="8" r="2" />
+  </svg>
+);
+const IconLink = () => (
+  <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
+    <path d="M9.5 2.5H13.5V6.5" /><path d="M13.5 2.5 8 8" /><path d="M12.5 9.5v3a1 1 0 0 1-1 1h-8a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1h3" />
+  </svg>
+);
+const IconTrash = () => (
+  <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
+    <path d="M2.5 4h11M6 4V2.5h4V4M4 4l.6 9a1 1 0 0 0 1 .9h4.8a1 1 0 0 0 1-.9L12 4" /><path d="M6.5 6.8v4.4M9.5 6.8v4.4" />
+  </svg>
+);
+
+
+/* The shape a saved post actually is.
+
+   One tile shape for everything always lies about something: a reel forced into 4:5 loses its
+   top and bottom, and a square pin in a 9:16 tile floats in a sea of nothing. Instagram's own
+   formats are the source of truth here — a reel is 9:16, a feed post is 4:5, a Pinterest pin
+   is usually 2:3 — so each card is given the shape its content was made in. */
+const SHAPE: Record<string, string> = {
+  reel: "9 / 16",
+  story: "9 / 16",
+  video: "9 / 16",
+  "reel cover": "9 / 16",
+  pin: "2 / 3",
+  carousel: "4 / 5",
+  "static post": "4 / 5",
+  banner: "16 / 9",
+  print: "3 / 4",
+};
+const shapeOf = (i: Inspiration): string => SHAPE[(i.format || "").trim().toLowerCase()] || "4 / 5";
 
 /* ---------- page ---------- */
 export default function InspirationPage() {
@@ -86,6 +141,9 @@ export default function InspirationPage() {
 
   const counts: Record<BoxKey, number> = {
     all: items.length,
+    /* Anything that moves, whether or not the MP4 made it to disk — a reel with only its
+       poster still belongs here, because what you are looking for is the reels. */
+    video: items.filter(isMoving).length,
     pinterest: items.filter((i) => i.platform === "Pinterest").length,
     ads: items.filter((i) => i.platform === "Ads").length,
     competitors: competitors.length,
@@ -103,7 +161,7 @@ export default function InspirationPage() {
           <h2>Inspiration</h2>
           <p className="lede">Ads and ideas worth recreating. Save the ones you like, then create an image from them.</p>
         </div>
-        <input className="input" style={{ maxWidth: 260 }} placeholder="Search competitor, platform, notes" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input className="input" style={{ maxWidth: 260 }} placeholder="Search competitor, platform, notes" aria-label="Search saved inspiration" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
 
       <div className="tabs src-tabs">
@@ -115,6 +173,7 @@ export default function InspirationPage() {
       </div>
 
       {box === "all" ? <AllBox items={filtered} q={q} onSaved={load} onDelete={remove} push={push} /> : null}
+      {box === "video" ? <VideoBox items={filtered.filter(isMoving)} onDelete={remove} onSaved={load} push={push} /> : null}
       {box === "pinterest" ? <PinterestBox items={filtered.filter((i) => i.platform === "Pinterest")} savedOrigins={savedOrigins} onImport={importItems} onDelete={remove} push={push} /> : null}
       {box === "ads" ? <AdsBox items={filtered.filter((i) => i.platform === "Ads")} competitors={competitors} onSaved={load} onDelete={remove} push={push} /> : null}
       {box === "competitors" ? <CompetitorsBox items={items} competitors={competitors} savedOrigins={savedOrigins} onImport={importItems} onSaved={load} onCompetitors={loadCompetitors} push={push} /> : null}
@@ -148,11 +207,38 @@ function LibraryGrid({ items, onDelete, emptyTitle, emptyHint }: { items: Inspir
   })), [pics]);
   if (!items.length) return <Empty title={emptyTitle} hint={emptyHint} />;
   return (
-    <div className="grid-cards">
+    <div className="insp-wall">
       {items.map((i) => (
-        <div key={i.id} className={`card ${i.file_id ? "reveal" : ""}`}>
-          <div className="thumb" onClick={() => i.file_id && setAt(pics.findIndex((x) => x.id === i.id))} style={i.file_id ? { cursor: "zoom-in" } : undefined}>
-            {i.file_id ? (
+        /* Every card in this grid is the same shape and the same anatomy. Giving videos their
+           own layout left two kinds of card side by side — one tall with its words beneath,
+           one square with them overlaid — and a row is only ever as short as its tallest
+           member, so the still cards stretched to match and the grid came apart. A video keeps
+           the overlay too; the play bar is kept clear of it in CSS instead. */
+        <div key={i.id} className={`card ${i.file_id ? "reveal" : ""}${i.video_file_id ? " has-video" : ""}`}>
+          <div
+            className="thumb"
+            /* A video owns its own clicks — play, scrub, volume — so the zoom-into-the-viewer
+               behaviour only applies to stills. */
+            onClick={() => !i.video_file_id && i.file_id && setAt(pics.findIndex((x) => x.id === i.id))}
+            style={{
+              aspectRatio: shapeOf(i),
+              ...(i.file_id && !i.video_file_id ? { cursor: "zoom-in" } : null),
+            }}
+          >
+            {i.video_file_id ? (
+              /* A reel plays where it sits. The cover it used to show is the poster now, so
+                 nothing moves until you ask it to. */
+              <video
+                src={fileUrl(i.video_file_id)}
+                poster={i.file_id ? fileUrl(i.file_id) : undefined}
+                controls muted playsInline preload="metadata"
+                onPlay={(e) => {
+                  for (const other of document.querySelectorAll("video")) {
+                    if (other !== e.currentTarget && !other.paused) other.pause();
+                  }
+                }}
+              />
+            ) : i.file_id ? (
               <img src={fileUrl(i.file_id)} alt={i.title} loading="lazy" />
             ) : (
               <div style={{ display: "grid", alignContent: "start", height: "100%", padding: 12, color: "var(--text-dim)", fontSize: 12.5, fontWeight: 300, lineHeight: 1.45, overflow: "hidden" }}>
@@ -167,13 +253,23 @@ function LibraryGrid({ items, onDelete, emptyTitle, emptyHint }: { items: Inspir
             <p>{[i.competitor, i.format].filter(Boolean).join(" · ") || "No tags"} · {fmtDay(i.created_at)}</p>
             {i.notes ? <p>{i.notes.slice(0, 120)}</p> : null}
             {!i.file_id && i.rights ? <span className="rights">{i.rights}</span> : null}
-            <div className="row">
-              {i.file_id ? <Link className="btn small primary" href={`/creation?ref=${i.id}`}>Recreate</Link> : <span className="pill">no image</span>}
-              <span className="actions">
-                {i.file_id ? <button className="btn small" type="button" onClick={() => setAt(pics.findIndex((x) => x.id === i.id))}>View</button> : null}
-                {i.source_url ? <a className="btn small ghost" href={i.source_url} target="_blank" rel="noreferrer">Source</a> : null}
-                <button className="btn small danger" type="button" onClick={() => onDelete(i.id)}>Delete</button>
-              </span>
+            {/* Four words wrapped onto three lines and took most of the card. As icons they sit
+                on one row and give the picture back its space. Each keeps its name for a screen
+                reader and shows it on hover, so nothing is lost but the clutter. */}
+            <div className="icon-row">
+              {i.file_id
+                ? <Link className="ibtn primary" href={`/creation?ref=${i.id}`} aria-label="Recreate this with our product" title="Recreate"><IconWand /></Link>
+                : <span className="pill">no image</span>}
+              {i.file_id ? (
+                <button className="ibtn" type="button" aria-label="View it full size" title="View"
+                  onClick={() => setAt(pics.findIndex((x) => x.id === i.id))}><IconEye /></button>
+              ) : null}
+              {i.source_url ? (
+                <a className="ibtn" href={i.source_url} target="_blank" rel="noreferrer"
+                  aria-label="Open the original post" title="Original post"><IconLink /></a>
+              ) : null}
+              <button className="ibtn danger" type="button" aria-label="Remove from inspiration" title="Remove"
+                onClick={() => onDelete(i.id)}><IconTrash /></button>
             </div>
           </div>
         </div>
@@ -257,6 +353,105 @@ function useFetcher(push: Push) {
 }
 
 /* ---------- box 1: All ---------- */
+/* Everything that moves, each one playing on its own.
+
+   A reel in a grid of stills is a frozen first frame, which tells you nothing about the thing
+   you saved it for — the cut, the pace, where the hook lands. These play in place, and only
+   one at a time: starting a second pauses the first, because a wall of competing audio is
+   worse than no audio. They start muted, as every autoplay policy insists, with the controls
+   there to turn sound on. */
+function VideoBox({ items, onDelete, onSaved, push }: { items: Inspiration[]; onDelete: (id: string) => void; onSaved: () => void; push: Push }) {
+  const refs = useRef<Record<string, HTMLVideoElement | null>>({});
+  const [filling, setFilling] = useState(false);
+
+  const backfill = async () => {
+    setFilling(true);
+    try {
+      const r = await postJson<{ looked: number; filled: number; missed: number; errors: string[] }>(
+        "/api/inspiration/instagram", { action: "backfill-video" });
+      const bits = [`${r.filled} video${r.filled === 1 ? "" : "s"} fetched`];
+      if (r.missed) bits.push(`${r.missed} too old to reach`);
+      if (r.errors.length) bits.push(r.errors[0]);
+      push(bits.join(" · "), r.filled ? "ok" : undefined);
+      onSaved();
+    } catch (e) { push((e as Error).message, "bad"); } finally { setFilling(false); }
+  };
+
+  const soloPlay = (id: string) => {
+    for (const [key, el] of Object.entries(refs.current)) {
+      if (key !== id && el && !el.paused) el.pause();
+    }
+  };
+
+  if (!items.length) {
+    return (
+      <Empty
+        title="No video saved yet"
+        hint="Reels come in with the competitors' Instagram sync. New ones arrive with their video; anything saved before this existed kept only its cover frame."
+      />
+    );
+  }
+
+  const playable = items.filter((i) => i.video_file_id);
+  const stillsOnly = items.length - playable.length;
+
+  return (
+    <div className="stack">
+      <div className="row between wrap">
+        <p className="small muted" style={{ margin: 0 }}>
+          {playable.length} of {items.length} {items.length === 1 ? "plays" : "play"} here.
+          {stillsOnly ? ` ${stillsOnly} ${stillsOnly === 1 ? "was" : "were"} saved as a cover frame only.` : ""}
+        </p>
+        {stillsOnly ? (
+          <button className="btn small" type="button" disabled={filling} onClick={backfill}>
+            {filling ? "Fetching…" : `Fetch the ${stillsOnly === 1 ? "missing video" : "missing videos"}`}
+          </button>
+        ) : null}
+      </div>
+
+      <div className="grid-cards">
+        {items.map((i) => (
+          <div key={i.id} className={`card vcard${i.video_file_id ? " has-video" : ""}`}>
+            <div className="thumb">
+              {i.video_file_id ? (
+                <video
+                  ref={(el) => { refs.current[i.id] = el; }}
+                  src={fileUrl(i.video_file_id)}
+                  poster={i.file_id ? fileUrl(i.file_id) : undefined}
+                  controls
+                  muted
+                  playsInline
+                  preload="metadata"
+                  onPlay={() => soloPlay(i.id)}
+                />
+              ) : i.file_id ? (
+                <img src={fileUrl(i.file_id)} alt={i.title} loading="lazy" />
+              ) : (
+                <span className="small muted">no cover</span>
+              )}
+            </div>
+            <div className="body">
+              <strong>{i.title}</strong>
+              <span className="small muted">
+                {[i.competitor, i.format, fmtDay(i.created_at)].filter(Boolean).join(" · ")}
+              </span>
+              {i.notes ? <span className="small muted">{i.notes}</span> : null}
+              {/* The same icons as the main grid, so one habit works on both. */}
+              <div className="icon-row">
+                {i.file_id ? <Link className="ibtn primary" href={`/creation?ref=${i.id}`} aria-label="Recreate this with our product" title="Recreate"><IconWand /></Link> : null}
+                {i.source_url ? (
+                  <a className="ibtn" href={i.source_url} target="_blank" rel="noreferrer noopener" aria-label="Open the original post" title="Original post"><IconLink /></a>
+                ) : null}
+                <button className="ibtn danger" type="button" aria-label="Remove from inspiration" title="Remove" onClick={() => onDelete(i.id)}><IconTrash /></button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function AllBox({ items, q, onSaved, onDelete, push }: { items: Inspiration[]; q: string; onSaved: () => void; onDelete: (id: string) => void; push: Push }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);

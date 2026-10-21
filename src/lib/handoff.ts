@@ -1,4 +1,4 @@
-import { getDb, getSetting, now, getFile, UPLOAD_DIR } from "@/lib/db";
+import { getDb, getSetting, now, getFile, uploadDir } from "@/lib/db";
 import { uploadPublic } from "@/lib/supabase";
 import { publishAllowed } from "@/lib/signoff";
 import fs from "fs";
@@ -132,7 +132,7 @@ export async function postForHandoff(id: string): Promise<HandoffPost | null> {
     post.image_note = "The picture is no longer in the library. Post the words alone and say so.";
     return post;
   }
-  const full = path.join(UPLOAD_DIR, f.path);
+  const full = path.join(uploadDir(), f.path);
   if (!fs.existsSync(full)) {
     post.image_note = "The picture has gone missing from disk. Post the words alone and say so.";
     return post;

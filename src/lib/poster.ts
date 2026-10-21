@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { getDb, newId, now, saveFileBuffer, getFile, UPLOAD_DIR } from "@/lib/db";
+import { getDb, newId, now, saveFileBuffer, getFile, uploadDir } from "@/lib/db";
 import { chromePath } from "@/lib/intelpdf";
 
 const run = promisify(execFile);
@@ -104,7 +104,7 @@ function photoPath(fileId?: string | null): string | null {
   if (!fileId) return null;
   const row = getFile(fileId);
   if (!row) return null;
-  const full = path.join(UPLOAD_DIR, row.path);
+  const full = path.join(uploadDir(), row.path);
   return fs.existsSync(full) ? full : null;
 }
 
@@ -239,7 +239,11 @@ export function posterHtml(spec: PosterSpec): string {
   .big { font-size:${px(72)}; font-weight:600; line-height:1.08; letter-spacing:-.035em; max-width:16ch; }
   /* The photograph sits in the middle band at a size where the whole vehicle reads. Cropping a
      product past recognition turns the proof into decoration. */
+  /* Width alone decided nothing but the width: the height followed the picture's own shape, so
+     a square or upright photograph grew past the frame and printed over the facts at the foot.
+     The band is given both bounds, and the picture is fitted inside it whatever shape it is. */
   .bike { position:absolute; left:50%; transform:translateX(-50%); top:${px(498)}; width:${px(1000)};
+    height:${px(620)}; object-fit:contain; object-position:center;
     filter:drop-shadow(0 ${px(40)} ${px(60)} rgba(0,0,0,.78)); }
   .foot { margin-top:auto; }
   .facts { display:flex; border-top:1px solid rgba(244,246,242,.16); padding-top:${px(24)}; }

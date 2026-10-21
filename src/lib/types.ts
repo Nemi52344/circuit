@@ -1,17 +1,30 @@
 export type Product = { id: string; name: string; color: string; tags: string; file_id: string; created_at: string };
 export type Inspiration = {
   id: string; title: string; competitor: string; platform: string; format: string; source_url: string; notes: string;
-  file_id: string | null; created_at: string; rights?: string; origin?: string; mime?: string | null;
+  /* file_id is the picture — for a reel, its poster frame. video_file_id is the reel itself,
+     when the MP4 was still fetchable at the time it was saved. */
+  file_id: string | null; video_file_id?: string | null;
+  created_at: string; rights?: string; origin?: string; mime?: string | null;
 };
 export type Creation = {
   id: string; inspiration_id: string | null; product_id: string | null; prompt: string; model: string; mode: string;
   file_id: string; status: string; title: string; created_at: string;
   inspiration_title?: string; competitor?: string; product_name?: string; product_color?: string; post_count?: number;
+  /* The four checks made before approval, and what is still outstanding. */
+  qa?: Record<string, boolean>; qa_complete?: boolean; qa_outstanding?: string[];
+  /* The caption written alongside this picture, if one has been. */
+  caption_draft_id?: string | null;
+  /* What has been said about it, and where it sits among its versions. */
+  note_count?: number; child_count?: number;
+  parent_id?: string | null; round?: number;
 };
 export type Post = {
   id: string; platform: string; caption: string; file_id: string | null; creation_id: string | null; scheduled_at: string;
   status: string; posted_url: string; notes: string; created_at: string; updated_at: string;
   creation_title?: string; image_file_id?: string | null; metric_count?: number;
+  /* Where this post sends people, and the tagged version of that link. The tag is built on
+     read, never stored, so it cannot fall out of step with the post. */
+  link_url?: string; utm_campaign?: string; utm_content?: string; tagged_link?: string;
 };
 export type Draft = { id: string; type: string; title: string; body: string; meta: string; status: string; created_at: string; updated_at: string };
 export type Metric = {
@@ -21,9 +34,9 @@ export type Metric = {
 };
 export type FileRow = {
   id: string; name: string; mime: string; size: number; path: string; kind: string; created_at: string;
-  /* What the brand store adds on top: a name a person chose, words to find it by, and whether
-     this is one of ours rather than a draft or a scraped reference. */
-  title?: string; tags?: string; brand?: number;
+  tags?: string; title?: string; brand?: number; poster_id?: string | null;
+  /* What this picture may be used for, and the hash that tells us we already have it. */
+  rights?: string; sha256?: string;
 };
 export type Brand = { name: string; tagline: string; tone: string; colors: string; claims: string; audience: string; website: string };
 

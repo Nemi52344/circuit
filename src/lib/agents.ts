@@ -116,14 +116,37 @@ export async function runAgent(agent: Agent, extra?: Record<string, unknown>): P
   ].filter(Boolean).join("\n");
 
   try {
-    const answer = await runChatGptJson(prompt, { search: agent.search !== 0, timeoutMs: 10 * 60 * 1000 });
+    /* An agent that is allowed to search is doing real reading before it answers, and ten
+       minutes was not enough for it — that ceiling is what failed six morning briefings and
+       three learning runs. One that cannot search has nothing to wait for. A run that overruns
+       is retried once by the runner itself. */
+    const answer = await runChatGptJson(prompt, {
+      search: agent.search !== 0,
+      timeoutMs: (agent.search !== 0 ? 18 : 8) * 60 * 1000,
+    });
     // an agent that returns "findings" is filing them, not just saying them
     const found = (answer as { findings?: Incoming[] })?.findings;
     const filed = Array.isArray(found) && found.length ? remember(found, agent.name) : undefined;
-    return { ok: true, answer, text: JSON.stringify(answer), seconds: Math.round((Date.now() - started) / 100) / 10, error: "", filed };
+    const seconds = Math.round((Date.now() - started) / 100) / 10;
+    recordRun(agent.id, true, "", seconds);
+    return { ok: true, answer, text: JSON.stringify(answer), seconds, error: "", filed };
   } catch (e) {
-    return { ok: false, answer: null, text: "", seconds: Math.round((Date.now() - started) / 100) / 10, error: (e as Error).message };
+    const seconds = Math.round((Date.now() - started) / 100) / 10;
+    recordRun(agent.id, false, (e as Error).message, seconds);
+    return { ok: false, answer: null, text: "", seconds, error: (e as Error).message };
   }
+}
+
+/* Every run leaves a mark on the agent itself, so "which of these actually works" is a
+   question the app can answer rather than one somebody has to reconstruct from job history. */
+function recordRun(id: string, ok: boolean, error: string, seconds: number) {
+  try {
+    getDb().prepare(`UPDATE agents
+       SET last_run = ?, last_ok = ?, last_error = ?, last_seconds = ?,
+           runs = COALESCE(runs, 0) + 1, fails = COALESCE(fails, 0) + ?
+       WHERE id = ?`)
+      .run(now(), ok ? 1 : 0, ok ? "" : error.slice(0, 300), Math.round(seconds), ok ? 0 : 1, id);
+  } catch { /* an older database without these columns must not break the run itself */ }
 }
 
 /* The agents Circuit ships with. They are ordinary agents: editable, and the owner can add

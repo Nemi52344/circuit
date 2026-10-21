@@ -4,17 +4,47 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { NAV, activeNav } from "@/lib/nav";
 
+/* One glyph per place, and no two the same.
+
+   Twenty-three links were sharing eight icons — four pages wore the same four squares — which
+   made the rail a column of near-identical marks that had to be read word by word. An icon that
+   does not distinguish is worse than no icon: it costs the space and gives nothing back. */
 const ICONS: Record<string, React.ReactNode> = {
   grid: <><rect x="1" y="1" width="6" height="6" /><rect x="9" y="1" width="6" height="6" /><rect x="1" y="9" width="6" height="6" /><rect x="9" y="9" width="6" height="6" /></>,
   calendar: <><rect x="1.5" y="3" width="13" height="11.5" /><path d="M1.5 6.5h13M5 1.5v3M11 1.5v3" /></>,
   chart: <><path d="M2 14h12" /><path d="M3.5 11l3-3.5 2.5 2 3.5-4.5" /></>,
   eye: <><path d="M1 8s2.6-4.5 7-4.5S15 8 15 8s-2.6 4.5-7 4.5S1 8 1 8z" /><circle cx="8" cy="8" r="2" /></>,
-  spark: <><path d="M8 1.5l1.6 4.4L14 7.5l-4.4 1.6L8 13.5 6.4 9.1 2 7.5l4.4-1.6z" /><path d="M13 12.5v2M12 13.5h2" /></>,
+  spark: <><path d="M8 1.5l1.6 4.4L14 7.5l-4.4 1.6L8 13.5 6.4 9.1 2 7.5l4.4-1.6z" /></>,
   wall: <><rect x="1.5" y="1.5" width="5.5" height="8" /><rect x="9" y="1.5" width="5.5" height="5" /><rect x="9" y="8.5" width="5.5" height="6" /><rect x="1.5" y="11.5" width="5.5" height="3" /></>,
   doc: <><path d="M3.5 1.5h6l3 3v10h-9z" /><path d="M9.5 1.5v3h3M5.5 8h5M5.5 11h5" /></>,
   box: <><path d="M8 1.5l6 3v7l-6 3-6-3v-7z" /><path d="M2 4.5l6 3 6-3M8 7.5v7" /></>,
   flow: <><rect x="1.5" y="1.5" width="5" height="4" /><rect x="9.5" y="6" width="5" height="4" /><rect x="1.5" y="10.5" width="5" height="4" /><path d="M6.5 3.5h3v2.5M9.5 10v2.5h-3" /></>,
   gear: <><circle cx="8" cy="8" r="2.6" /><path d="M8 1v2.4M8 12.6V15M15 8h-2.4M3.4 8H1M12.9 3.1l-1.7 1.7M4.8 11.2l-1.7 1.7M12.9 12.9l-1.7-1.7M4.8 4.8L3.1 3.1" /></>,
+
+  /* send — Posting: something leaving. */
+  send: <><path d="M14.5 1.5L7 9" /><path d="M14.5 1.5L10 14.5 7 9 1.5 6z" /></>,
+  /* stamp — Sign-off: a tick inside a seal. */
+  stamp: <><circle cx="8" cy="8" r="6.5" /><path d="M5 8.2l2.1 2.1L11 6.4" /></>,
+  /* frame — Poster studio: a canvas with a corner mark. */
+  frame: <><rect x="1.5" y="2.5" width="13" height="11" /><path d="M1.5 10.5l3.5-3 3 2.5 2.5-2 4 3.5" /><circle cx="5.5" cy="6" r="1.1" /></>,
+  /* ear — Listening. */
+  ear: <><path d="M5 6a3 3 0 1 1 6 0c0 2-2 2.4-2 4.2A2 2 0 0 1 7 12" /><path d="M8 14.5A6.5 6.5 0 1 1 8 1.5" /></>,
+  /* bulb — What we know. */
+  bulb: <><path d="M8 1.5a4.5 4.5 0 0 0-2.6 8.2V12h5.2V9.7A4.5 4.5 0 0 0 8 1.5z" /><path d="M6.4 14h3.2" /></>,
+  /* book — Brochures. */
+  book: <><path d="M2 2.5h4.5A1.5 1.5 0 0 1 8 4v10a1.5 1.5 0 0 0-1.5-1.5H2z" /><path d="M14 2.5H9.5A1.5 1.5 0 0 0 8 4v10a1.5 1.5 0 0 1 1.5-1.5H14z" /></>,
+  /* bars — Work, a chart of bars at different offsets. */
+  bars: <><path d="M2 3.5h7M4.5 8h8M2 12.5h5.5" /></>,
+  /* ledger — Admin. */
+  ledger: <><rect x="2.5" y="1.5" width="11" height="13" /><path d="M5.5 5h5M5.5 8h5M5.5 11h3" /></>,
+  /* clock — Crons: the thing that runs on a schedule. */
+  clock: <><circle cx="8" cy="8" r="6.5" /><path d="M8 4.5V8l2.5 1.8" /></>,
+  /* rupee — Finance, in the currency this company actually uses. */
+  rupee: <><path d="M4.5 2h7M4.5 5.5h7M10.5 2c0 2.2-1.6 3.5-4 3.5h-2l6 9" /></>,
+  /* hammer — What to build. */
+  hammer: <><path d="M9.5 2.5l4 4-2 2-4-4z" /><path d="M7.5 4.5L2 10v4h4l5.5-5.5" /></>,
+  /* people — People. */
+  people: <><circle cx="6" cy="5" r="2.5" /><path d="M1.5 14c0-2.5 2-4 4.5-4s4.5 1.5 4.5 4" /><path d="M11 3.2a2.5 2.5 0 0 1 0 4.6M12 10.4c1.6.5 2.5 1.8 2.5 3.6" /></>,
 };
 
 function Icon({ name }: { name: string }) {

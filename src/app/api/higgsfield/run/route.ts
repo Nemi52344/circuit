@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { getDb, newId, now, getFile, saveFileBuffer, UPLOAD_DIR } from "@/lib/db";
+import { getDb, newId, now, getFile, saveFileBuffer, uploadDir } from "@/lib/db";
 import { getBrand } from "@/lib/brand";
 import { buildRecreatePrompt } from "@/lib/gemini";
 import { getHfCreds, findModel, uploadImage, buildBody, submit, poll, downloadImage, HF_MODELS } from "@/lib/higgsfield";
@@ -60,7 +60,7 @@ export const POST = handle(async (req) => {
     for (const fid of wanted) {
       const f = getFile(fid);
       if (!f) return fail("A source image is missing from the library");
-      const abs = path.join(UPLOAD_DIR, f.path);
+      const abs = path.join(uploadDir(), f.path);
       if (!fs.existsSync(abs)) return fail(`${f.name} is missing on disk`);
       urls.push(await uploadImage(creds, fs.readFileSync(abs), f.mime));
     }

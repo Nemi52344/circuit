@@ -1,9 +1,9 @@
-import { handle, handleAdmin, ok, bad, readJson } from "@/lib/http";
+import { handle, handleCan, ok, bad, readJson } from "@/lib/http";
 import { waitingForSignoff, signedOff, decide, type Decision } from "@/lib/signoff";
 
 export const runtime = "nodejs";
 
-/* The sign-off queue: what an admin has been asked to look at, and what has already cleared. */
+/* The sign-off queue: what is waiting to be looked at, and what has already cleared. */
 
 export const GET = handle(async () => {
   const waiting = waitingForSignoff();
@@ -16,7 +16,7 @@ export const GET = handle(async () => {
   });
 });
 
-export const POST = handleAdmin(async (req, user) => {
+export const POST = handleCan("approve", async (req, user) => {
   const b = await readJson<{ id?: string; decision?: Decision; note?: string }>(req);
   if (!b.id) return bad("id required");
   if (b.decision !== "approved" && b.decision !== "rejected") return bad("Say approved or rejected");

@@ -9,9 +9,10 @@ import type { ViewerItem } from "@/components/ui";
 type Side = { label: string; posts: number; engagement: number; reach: number | null };
 type Split = { key: string; label: string; a: Side; b: Side; times: number; winner: string; solid: boolean };
 type Best = { ig_id: string; permalink: string; file_id: string | null; engagement: number; reach: number | null; times: number; subject: string; text_on_image: string };
+type Judged = { own_post_id: string; ig_id: string; permalink: string; file_id: string | null; engagement: number; reach: number | null; verdict: string; verdict_why: string; caption: string };
 type Learned = {
   tagged: number; untagged: number; left: number; average: number;
-  splits: Split[]; advice: string[]; best: Best[];
+  splits: Split[]; advice: string[]; best: Best[]; judged?: Judged[];
   run?: { tagged: number; skipped: number; errors: string[] };
 };
 
@@ -34,6 +35,23 @@ export function PosterInsights({ push }: { push: (t: string, tone?: string) => v
     } finally {
       setBusy(false);
     }
+  };
+
+  /* Keeping a post as a model, or taking it out of the learning.
+
+     Setting one aside asks for a reason, because a post dropped with no explanation is
+     indistinguishable from a mis-click six months later. Keeping one does not: "this is good"
+     needs no defence. */
+  const judge = async (p: Judged, verdict: string) => {
+    let why = "";
+    if (verdict === "aside") {
+      why = (window.prompt("Why is this one not a model to learn from?\n\nA festival, somebody else's news, a one-off — say what will not repeat.") || "").trim();
+      if (!why) return;
+    }
+    try {
+      setD(await postJson<Learned>("/api/posters", { action: "verdict", id: p.own_post_id, verdict, why }));
+      push(verdict === "keep" ? "Kept as a model" : verdict === "aside" ? "Set aside — it no longer shapes the advice" : "Cleared", "ok");
+    } catch (e) { push((e as Error).message, "bad"); }
   };
 
   const viewItems: ViewerItem[] = (d?.best || []).filter((b) => b.file_id).map((b) => ({
@@ -101,6 +119,45 @@ export function PosterInsights({ push }: { push: (t: string, tone?: string) => v
                 </div>
               </div>
             ))}
+          </div>
+        </>
+      ) : null}
+
+      {/* Every published post, with what has been decided about it. This is where a post that
+          did well for a reason that will not repeat gets taken out of the learning. */}
+      {d?.judged?.length ? (
+        <>
+          <div className="eyebrow" style={{ marginBottom: 0 }}>Every post, and what you made of it</div>
+          <div className="table-wrap">
+            <table className="data">
+              <thead><tr><th /><th className="wrap">Post</th><th>Interactions</th><th>Verdict</th><th /></tr></thead>
+              <tbody>
+                {d.judged.map((p) => (
+                  <tr key={p.own_post_id} className={p.verdict === "aside" ? "set-aside" : ""}>
+                    <td style={{ width: 54 }}>
+                      {p.file_id ? <img className="judge-thumb" src={fileUrl(p.file_id)} alt="" loading="lazy" /> : null}
+                    </td>
+                    <td className="wrap">
+                      {p.caption ? p.caption.slice(0, 90) : <span className="muted">No caption</span>}
+                      {p.verdict_why ? <div className="small muted" style={{ marginTop: 3 }}>Set aside: {p.verdict_why}</div> : null}
+                    </td>
+                    <td>{p.engagement.toLocaleString("en-IN")}</td>
+                    <td>
+                      {p.verdict === "keep" ? <Pill tone="ok">model</Pill>
+                        : p.verdict === "aside" ? <Pill tone="warn">set aside</Pill>
+                        : <span className="muted small">—</span>}
+                    </td>
+                    <td>
+                      <div className="row tight wrap">
+                        {p.verdict !== "keep" ? <button className="btn small" type="button" onClick={() => judge(p, "keep")}>Keep</button> : null}
+                        {p.verdict !== "aside" ? <button className="btn small ghost" type="button" onClick={() => judge(p, "aside")}>Set aside</button> : null}
+                        {p.verdict ? <button className="btn small ghost" type="button" onClick={() => judge(p, "")}>Clear</button> : null}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </>
       ) : null}

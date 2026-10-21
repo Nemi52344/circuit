@@ -5,7 +5,8 @@ import { api } from "@/lib/api";
 import { Empty, useToast } from "@/components/ui";
 import { Kpi, Delta } from "@/components/Sheet";
 import { money, moneyShort, monthLabel } from "@/lib/money";
-import type { MonthRow, Headline } from "@/lib/reports";
+import type { MonthRow, Headline, SocialReport, WorkReport } from "@/lib/reports";
+import { LineChart, type Point } from "@/components/Chart";
 
 /* Reports: the month beside the month before it.
 
@@ -18,7 +19,12 @@ type Data = {
   ahead: { n: number; first: string | null; last: string | null };
   admin: { unpaid: number; unpaid_value: number; overdue: number; items: number; stock_value: number; low: number };
   work: { total: number; doing: number; blocked: number; late: number; done_this_month: number };
+  social: SocialReport;
+  worked: WorkReport;
 };
+
+const hrs = (m: number) => (m >= 60 ? `${Math.round(m / 60)}h` : m ? `${m}m` : "—");
+const num = (v: number | null | undefined) => (v === null || v === undefined || v === 0 ? "—" : v.toLocaleString("en-IN"));
 
 const show = (h: Headline) =>
   h.kind === "money" ? moneyShort(h.value) : h.kind === "percent" ? `${h.value}%` : h.value.toLocaleString("en-IN");
@@ -26,6 +32,9 @@ const show = (h: Headline) =>
 export default function ReportsPage() {
   const [d, setD] = useState<Data | null>(null);
   const [months, setMonths] = useState(12);
+  /* Which line the social chart draws. Posts, reach and engagement answer different questions
+     and do not belong on one axis. */
+  const [socialLine, setSocialLine] = useState<"posts" | "reach" | "engagement">("posts");
   const { push, view } = useToast();
 
   const load = useCallback(() => api<Data>(`/api/reports?months=${months}`).then(setD).catch((e: Error) => push(e.message, "bad")), [push, months]);
@@ -50,7 +59,7 @@ export default function ReportsPage() {
           </p>
         </div>
         <span className="actions">
-          <select className="input" value={months} onChange={(e) => setMonths(Number(e.target.value))} style={{ minHeight: 38, width: "auto" }}>
+          <select className="input" aria-label="How many months to report on" value={months} onChange={(e) => setMonths(Number(e.target.value))} style={{ minHeight: 38, width: "auto" }}>
             <option value={6}>6 months</option><option value={12}>12 months</option><option value={24}>24 months</option>
           </select>
         </span>
@@ -98,10 +107,168 @@ export default function ReportsPage() {
         </section>
       </div>
 
+      {/* ---- the social media report ---- */}
+      {d.social?.months?.length ? (
+        <section className="panel stack">
+          <div className="panel-head">
+            <h3>Social media, month by month</h3>
+            <span className="muted small">
+              Read from the account's own history — {d.social.totals.posts} posts across {d.social.totals.months} months
+              with something in them, {d.social.from} to {d.social.to}
+            </span>
+          </div>
+
+          <div className="stat-row">
+            <div className="stat"><b>{d.social.totals.posts}</b><span>posts published</span></div>
+            <div className="stat"><b>{num(d.social.totals.reach)}</b><span>people reached</span></div>
+            <div className="stat"><b>{num(d.social.totals.interactions)}</b><span>likes, comments and saves</span></div>
+            <div className="stat">
+              <b>{d.social.busiest ? d.social.busiest.posts : "—"}</b>
+              <span>most in one month{d.social.busiest ? ` · ${d.social.busiest.label}` : ""}</span>
+            </div>
+          </div>
+
+          <div className="ig-chart">
+            <div className="ig-chart-head">
+              <span className="eyebrow">
+                {socialLine === "posts" ? "Posts published each month" : socialLine === "reach" ? "People reached each month" : "Engagement rate each month"}
+              </span>
+              <div className="seg">
+                {(["posts", "reach", "engagement"] as const).map((k) => (
+                  <button key={k} type="button" className={`seg-btn ${socialLine === k ? "on" : ""}`}
+                    aria-pressed={socialLine === k} onClick={() => setSocialLine(k)}>
+                    {k === "posts" ? "Posts" : k === "reach" ? "Reach" : "Engagement"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <LineChart
+              unit={socialLine === "posts" ? "posts" : socialLine === "reach" ? "reached" : "% of reach"}
+              points={d.social.months.map((m): Point => ({
+                label: m.label,
+                value: socialLine === "posts" ? m.posts : socialLine === "reach" ? m.reach : (m.engagement || 0),
+                note: m.posts ? `${m.reels} reel${m.reels === 1 ? "" : "s"}, ${m.carousels} carousel${m.carousels === 1 ? "" : "s"}, ${m.stills} still${m.stills === 1 ? "" : "s"}` : "",
+                thin: m.thin,
+                /* A month with nothing posted breaks the line everywhere except the posts
+                   view, where zero posts is the fact being reported. */
+                empty: socialLine !== "posts" && m.posts === 0,
+              }))}
+            />
+          </div>
+
+          <div className="table-wrap">
+            <table className="data">
+              <thead><tr>
+                <th>Month</th><th className="num">Posts</th><th className="num">Reels</th><th className="num">Carousels</th>
+                <th className="num">Stills</th><th className="num">Reach</th><th className="num">Avg reach</th>
+                <th className="num">Interactions</th><th className="num">Engagement</th><th className="num">Best post</th>
+              </tr></thead>
+              <tbody>
+                {[...d.social.months].reverse().map((m) => (
+                  <tr key={m.month} className={m.posts ? "" : "set-aside"}>
+                    <td className="strong">{m.label}{m.thin ? <span className="sub">thin month</span> : null}</td>
+                    <td className="num">{m.posts || "—"}</td>
+                    <td className="num muted">{m.reels || "—"}</td>
+                    <td className="num muted">{m.carousels || "—"}</td>
+                    <td className="num muted">{m.stills || "—"}</td>
+                    <td className="num">{num(m.reach)}</td>
+                    <td className="num muted">{num(m.avg_reach)}</td>
+                    <td className="num">{num(m.interactions)}</td>
+                    <td className="num">{m.engagement === null ? "—" : `${m.engagement}%`}</td>
+                    <td className="num muted">{num(m.best_reach)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {d.social.by_format.length ? (
+            <>
+              <div className="panel-head" style={{ marginBottom: 0 }}>
+                <h3 style={{ fontSize: 15 }}>Which format earns its place</h3>
+                <span className="small muted">Formats with at least three posts behind them</span>
+              </div>
+              <div className="table-wrap">
+                <table className="data">
+                  <thead><tr><th>Format</th><th className="num">Posts</th><th className="num">Average reach</th><th className="num">Average interactions</th></tr></thead>
+                  <tbody>
+                    {d.social.by_format.map((f) => (
+                      <tr key={f.label}>
+                        <td className="strong">{f.label}</td>
+                        <td className="num">{f.posts}</td>
+                        <td className="num">{num(f.avg_reach)}</td>
+                        <td className="num muted">{num(f.avg_interactions)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : null}
+
+          {d.social.notes.length ? (
+            <div className="note stack" style={{ gap: 6 }}>
+              {d.social.notes.map((n, i) => <div key={i} className="small muted">{n}</div>)}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
+      {/* ---- the work report ---- */}
+      {d.worked ? (
+        <section className="panel stack">
+          <div className="panel-head">
+            <h3>Work</h3>
+            <span className="muted small">What is on the board, what is finished, and where the hours sit</span>
+          </div>
+
+          <div className="stat-row">
+            <div className="stat"><b>{d.worked.open}</b><span>still open</span></div>
+            <div className="stat"><b>{d.worked.late || "—"}</b><span>past their date</span></div>
+            <div className="stat"><b>{hrs(d.worked.judged_minutes)}</b><span>judged as a person&rsquo;s job or Circuit&rsquo;s</span></div>
+            <div className="stat"><b>{hrs(d.worked.could_automate_minutes)}</b><span>of that, Circuit could take over</span></div>
+          </div>
+
+          <div className="table-wrap">
+            <table className="data">
+              <thead><tr><th>Area</th><th className="num">Open</th><th className="num">Done</th><th className="num">Late</th><th className="num">Hours</th></tr></thead>
+              <tbody>
+                {d.worked.by_area.map((a) => (
+                  <tr key={a.area}>
+                    <td className="strong">{a.area}</td>
+                    <td className="num">{a.open || "—"}</td>
+                    <td className="num muted">{a.done || "—"}</td>
+                    <td className="num">{a.late ? <span className="bad-text">{a.late}</span> : "—"}</td>
+                    <td className="num muted">{hrs(a.minutes)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {d.worked.months.some((m) => m.done) ? (
+            <div className="ig-chart">
+              <span className="eyebrow">Work finished each month</span>
+              <LineChart unit="finished"
+                points={d.worked.months.map((m): Point => ({ label: m.label, value: m.done, note: m.areas || "" }))} />
+            </div>
+          ) : null}
+
+          {d.worked.notes.length ? (
+            <div className="note stack" style={{ gap: 6 }}>
+              {d.worked.notes.map((n, i) => <div key={i} className="small muted">{n}</div>)}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
       <section className="panel stack">
         <div className="panel-head" style={{ marginBottom: 0 }}>
-          <h3>Month on month</h3>
-          <span className="small muted">Latest first</span>
+          <h3>Planned here, and the books</h3>
+          <span className="small muted">
+            What was planned in Circuit and what Circuit recorded against it — a different question from the
+            account&rsquo;s own history above. Latest first.
+          </span>
         </div>
         {rows.length ? (
           <div className="table-wrap">

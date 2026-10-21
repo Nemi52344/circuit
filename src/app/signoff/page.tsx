@@ -2,9 +2,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, postJson, fileUrl } from "@/lib/api";
 import { useToast, Empty } from "@/components/ui";
+import { can } from "@/lib/roles";
 import { useMe } from "@/components/Gate";
 
-/* Sign-off: an admin reading what is about to go public, and saying yes or no.
+/* Sign-off: somebody who can approve reading what is about to go public, and saying yes or no.
 
    Everything here is one question — would you be happy for this to be seen? So the caption is
    shown in full, at the size it will be read at, beside the picture that goes with it. No
@@ -37,7 +38,7 @@ export default function SignoffPage() {
   };
 
   if (!d) return <p className="muted">Loading…</p>;
-  const admin = me?.role === "admin";
+  const admin = can(me, "approve");
 
   return (
     <div className="stack">
@@ -46,7 +47,7 @@ export default function SignoffPage() {
         <div>
           <h2>Sign-off</h2>
           <p className="lede">
-            Nothing goes public until an admin says so. An approval covers the words that were read — edit a post after
+            Nothing goes public until somebody who can approve says so. An approval covers the words that were read — edit a post after
             it is signed off and it comes back here, because the yes was for the old version.
           </p>
         </div>
@@ -54,7 +55,7 @@ export default function SignoffPage() {
 
       {!admin ? (
         <p className="note small">
-          You can see what is waiting, but only an admin signs posts off. Yours is a marketing account.
+          You can see what is waiting, but your account cannot sign posts off — an owner, a manager or an approver can.
         </p>
       ) : null}
 
@@ -88,7 +89,7 @@ export default function SignoffPage() {
               ) : null}
               {admin ? (
                 <>
-                  <input className="input" placeholder="What needs changing? (required to send back)"
+                  <input className="input" placeholder="What needs changing? (required to send back)" aria-label="What needs changing before this can go out"
                     value={note[p.id] || ""} onChange={(e) => setNote((n) => ({ ...n, [p.id]: e.target.value }))} />
                   <span className="actions">
                     <button className="btn primary small" type="button" disabled={busy === p.id} onClick={() => decide(p.id, "approved")}>Sign off</button>

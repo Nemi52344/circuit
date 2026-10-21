@@ -3,6 +3,7 @@ import { getDb } from "@/lib/db";
 import { listTasks, pnlMonth } from "@/lib/books";
 import { thisMonth } from "@/lib/money";
 import { lastIntel } from "@/lib/intel";
+import { igSummary } from "@/lib/learn";
 
 export const runtime = "nodejs";
 
@@ -33,6 +34,8 @@ export const GET = handle(async () => {
       late: tasks.filter((t) => t.status !== "done" && t.end_date && t.end_date < today).length,
     },
     month: pnlMonth(thisMonth()),
+    /* How the account is actually doing, read from its own Instagram history. */
+    ig: igSummary(),
     last_intel: lastIntel(),
   });
 });

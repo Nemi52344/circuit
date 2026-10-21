@@ -1,11 +1,47 @@
 import Database from "better-sqlite3";
+import { AsyncLocalStorage } from "node:async_hooks";
 import fs from "node:fs";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { migrate } from "@/lib/migrate";
 
 export const DATA_DIR = path.join(process.cwd(), "data");
-export const UPLOAD_DIR = path.join(DATA_DIR, "uploads");
+
+/* ---- more than one brand ----
+
+   The agency runs BNC, iDelivery and BOOMA, and the requirement is that every table is scoped
+   by brand. There are two ways to do that and only one of them is safe here.
+
+   Adding a brand_id column to twenty-six tables would mean auditing all 481 prepared
+   statements in this codebase and getting every one right. One missed WHERE and BOOMA's
+   calendar shows BNC's posts — silently, with no error, in a way nobody notices until a post
+   goes out under the wrong name. The failure is invisible and the blast radius is the whole
+   point of keeping the brands apart.
+
+   So instead: one database per brand. Scoping stops being something every query has to
+   remember and becomes a property of which file is open. A brand cannot see another's rows
+   because they are not in the file. Nothing is scoped by convention; it is scoped by physics.
+
+   What stays shared, in accounts.db: who can sign in, their sessions, and the list of brands
+   itself. Signing in is not per-brand — the same person runs all three.
+
+   BNC keeps data/circuit.db and data/uploads exactly where they are, so switching this on
+   moves none of the existing work. New brands get data/brands/<slug>/. */
+
+export const ACCOUNTS_DB = path.join(DATA_DIR, "accounts.db");
+
+export type Brand = { id: string; slug: string; name: string; dir: string; active: number; created_at: string };
+
+/* The brand that was here before brands existed. Its dir is empty, meaning data/ itself. */
+export const DEFAULT_BRAND_SLUG = "bnc";
+
+export const brandDataDir = (slug: string, dir: string): string =>
+  dir ? path.join(DATA_DIR, dir) : DATA_DIR;
+
+/* Where the active brand's pictures live. A function rather than a constant, because it now
+   depends on which brand is in front. */
+export const uploadDir = (): string => { const b = currentBrand(); return path.join(brandDataDir(b.slug, b.dir), "uploads"); };
+
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS settings (
@@ -512,24 +548,194 @@ CREATE TABLE IF NOT EXISTS charges (
 
 declare global {
   // eslint-disable-next-line no-var
-  var __circuitDb: Database.Database | undefined;
+  var __circuitDbs: Map<string, Database.Database> | undefined;
+  // eslint-disable-next-line no-var
+  var __circuitAccounts: Database.Database | undefined;
+}
+
+/* ---- the shared database: who signs in, and which brands exist ---- */
+
+const ACCOUNTS_SCHEMA = `
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL UNIQUE,
+  role TEXT NOT NULL DEFAULT 'marketing', pass_salt TEXT NOT NULL, pass_hash TEXT NOT NULL,
+  active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS sessions (
+  token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL,
+  created_at TEXT NOT NULL, expires_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+CREATE TABLE IF NOT EXISTS brands (
+  id TEXT PRIMARY KEY,
+  slug TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  /* Relative to data/. Empty means data/ itself, which is where BNC already is. */
+  dir TEXT NOT NULL DEFAULT '',
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS account_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+`;
+
+export function getAccountsDb(): Database.Database {
+  if (!global.__circuitAccounts) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    const db = new Database(ACCOUNTS_DB);
+    db.pragma("journal_mode = WAL");
+    db.exec(ACCOUNTS_SCHEMA);
+
+    /* First run after the split: the accounts were living in the one database Circuit used to
+       have. They are copied, not moved — the originals stay put, harmless, so a rollback to
+       the previous version still finds its users where it left them. */
+    const haveUsers = (db.prepare("SELECT COUNT(*) n FROM users").get() as { n: number }).n;
+    const legacy = path.join(DATA_DIR, "circuit.db");
+    if (!haveUsers && fs.existsSync(legacy)) {
+      const old = new Database(legacy, { readonly: true });
+      try {
+        const rows = old.prepare("SELECT * FROM users").all() as Record<string, unknown>[];
+        const ins = db.prepare(`INSERT OR IGNORE INTO users (id,name,email,role,pass_salt,pass_hash,active,created_at)
+                                VALUES (@id,@name,@email,@role,@pass_salt,@pass_hash,@active,@created_at)`);
+        db.transaction(() => { for (const r of rows) ins.run(r); })();
+        const ses = old.prepare("SELECT * FROM sessions").all() as Record<string, unknown>[];
+        const insS = db.prepare("INSERT OR IGNORE INTO sessions (token_hash,user_id,created_at,expires_at) VALUES (@token_hash,@user_id,@created_at,@expires_at)");
+        db.transaction(() => { for (const r of ses) insS.run(r); })();
+        if (rows.length) console.log(`[db] brought ${rows.length} account(s) and ${ses.length} session(s) into accounts.db`);
+      } catch { /* an older file without those tables is simply nothing to bring over */ }
+      finally { old.close(); }
+    }
+
+    /* The two roles Circuit shipped with, said in the five-role vocabulary.
+
+       An admin signed things off and handed out accounts, which is the owner; marketing made
+       the work, which is the creator. Done once, in place: the words changed, nobody's
+       permissions did. Code also reads the old values through asRole(), so a database that
+       somehow misses this still behaves. */
+    const renamed = db.prepare("UPDATE users SET role = 'owner' WHERE role = 'admin'").run().changes
+      + db.prepare("UPDATE users SET role = 'creator' WHERE role = 'marketing'").run().changes;
+    if (renamed) console.log(`[db] ${renamed} account(s) moved to the five-role names`);
+
+    /* The brand that was always here. Its dir is empty, so its database and pictures stay
+       exactly where they have always been. */
+    const haveBrands = (db.prepare("SELECT COUNT(*) n FROM brands").get() as { n: number }).n;
+    if (!haveBrands) {
+      db.prepare("INSERT INTO brands (id, slug, name, dir, active, created_at) VALUES (?, ?, ?, '', 1, ?)")
+        .run(randomUUID(), DEFAULT_BRAND_SLUG, "BNC Motors", new Date().toISOString());
+    }
+    global.__circuitAccounts = db;
+  }
+  return global.__circuitAccounts;
+}
+
+export function accountSetting(key: string): string | null {
+  const r = getAccountsDb().prepare("SELECT value FROM account_settings WHERE key = ?").get(key) as { value: string } | undefined;
+  return r ? r.value : null;
+}
+export function setAccountSetting(key: string, value: string) {
+  getAccountsDb().prepare("INSERT INTO account_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(key, value);
+}
+
+export const listBrands = (): Brand[] =>
+  getAccountsDb().prepare("SELECT * FROM brands WHERE active = 1 ORDER BY created_at").all() as Brand[];
+
+/* Which brand is in front. One owner at one Mac, so this is a single stored choice rather
+   than something carried per browser tab — and the background worker needs to read the same
+   answer, which a cookie could not give it. */
+export function activeBrand(): Brand {
+  const all = listBrands();
+  const want = accountSetting("active_brand");
+  return all.find((b) => b.slug === want) || all[0];
+}
+
+export function setActiveBrand(slug: string): Brand {
+  const b = listBrands().find((x) => x.slug === slug);
+  if (!b) throw new Error("No such brand");
+  setAccountSetting("active_brand", slug);
+  return b;
+}
+
+export function createBrand(name: string): Brand {
+  const clean = name.trim();
+  if (!clean) throw new Error("Give the brand a name");
+  const slug = clean.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
+  if (!slug) throw new Error("That name has no letters or numbers in it");
+  const db = getAccountsDb();
+  if (db.prepare("SELECT 1 FROM brands WHERE slug = ?").get(slug)) throw new Error("A brand already uses that name");
+  const dir = path.join("brands", slug);
+  fs.mkdirSync(path.join(DATA_DIR, dir, "uploads"), { recursive: true });
+  const id = randomUUID();
+  db.prepare("INSERT INTO brands (id, slug, name, dir, active, created_at) VALUES (?, ?, ?, ?, 1, ?)")
+    .run(id, slug, clean, dir, new Date().toISOString());
+  /* Build its database now rather than on first use, so a brand that has just been added is
+     immediately a real place with a calendar in it. */
+  openBrandDb(slug, dir);
+  return db.prepare("SELECT * FROM brands WHERE id = ?").get(id) as Brand;
+}
+
+/* ---- a brand's own database ---- */
+
+function openBrandDb(slug: string, dir: string): Database.Database {
+  const root = brandDataDir(slug, dir);
+  fs.mkdirSync(path.join(root, "uploads"), { recursive: true });
+  const db = new Database(path.join(root, "circuit.db"));
+  db.pragma("journal_mode = WAL");
+  /* The CREATE block builds a new database in one go; the migrations replay everything that
+     came after it against an older one. Both are idempotent, but only the second is
+     recorded — so a database can now say which changes it has had, and a copy restored from
+     data/backups can be told apart from a fresh install. */
+  db.exec(SCHEMA);
+  const ran = migrate(db);
+  if (ran.length) console.log(`[db] ${slug}: applied ${ran.length} migration(s): ${ran.map((m) => `${m.id} ${m.name}`).join(", ")}`);
+  return db;
 }
 
 export function getDb(): Database.Database {
-  if (!global.__circuitDb) {
-    fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-    const db = new Database(path.join(DATA_DIR, "circuit.db"));
-    db.pragma("journal_mode = WAL");
-    /* The CREATE block builds a new database in one go; the migrations replay everything that
-       came after it against an older one. Both are idempotent, but only the second is
-       recorded — so a database can now say which changes it has had, and a copy restored from
-       data/backups can be told apart from a fresh install. */
-    db.exec(SCHEMA);
-    const ran = migrate(db);
-    if (ran.length) console.log(`[db] applied ${ran.length} migration(s): ${ran.map((m) => `${m.id} ${m.name}`).join(", ")}`);
-    global.__circuitDb = db;
+  const brand = currentBrand();
+  const open = (global.__circuitDbs ??= new Map<string, Database.Database>());
+  let db = open.get(brand.slug);
+  if (!db) { db = openBrandDb(brand.slug, brand.dir); open.set(brand.slug, db); }
+  return db;
+}
+
+/* The background worker has to do its rounds for every brand, not only whichever one is on
+   screen. It cannot do that by flipping the stored choice: a page load that landed in the
+   middle of the worker's BOOMA pass would quietly render BOOMA's calendar under BNC's name.
+
+   So the worker's brand is carried on the async context instead. It applies to the worker's
+   own call stack and nothing else — an HTTP request has no store, so it keeps reading the
+   brand the person actually chose, whatever the worker is doing at the time. */
+const brandContext = new AsyncLocalStorage<Brand>();
+
+export async function forEachBrand<T>(fn: (brand: Brand) => Promise<T>): Promise<{ brand: Brand; result?: T; error?: string }[]> {
+  const out: { brand: Brand; result?: T; error?: string }[] = [];
+  for (const b of listBrands()) {
+    try {
+      out.push({ brand: b, result: await brandContext.run(b, () => fn(b)) });
+    } catch (e) {
+      /* One brand's bad day is not the others'. */
+      out.push({ brand: b, error: (e as Error).message });
+    }
   }
-  return global.__circuitDb;
+  return out;
+}
+
+/* The brand this code is running for: the worker's, if we are inside one of its passes;
+   otherwise the one the person picked. */
+export const currentBrand = (): Brand => brandContext.getStore() || activeBrand();
+
+/* Carrying a brand across an HTTP call.
+
+   The worker reaches parts of Circuit through its own API rather than by calling the library
+   directly, and an async context does not survive that hop — the route handler starts with no
+   store and would answer for whichever brand is on screen. During BNC's pass that meant the
+   worker asking for the queue and being handed BOOMA's.
+
+   So the worker names the brand on the request, and the gate re-establishes it here. Only a
+   caller holding the per-process internal secret may do that; a browser cannot ask to be
+   served another brand's data by adding a header. */
+export function runWithBrand<T>(slug: string, fn: () => T): T {
+  const b = listBrands().find((x) => x.slug === slug);
+  return b ? brandContext.run(b, fn) : fn();
 }
 
 export const now = () => new Date().toISOString();
@@ -546,7 +752,12 @@ export function setSetting(key: string, value: string) {
     .run(key, value);
 }
 
-export type FileRow = { id: string; name: string; mime: string; size: number; path: string; kind: string; created_at: string };
+/* The columns a file row actually has. The optional ones arrived with later migrations, so a
+   row read from an older backup may not carry them. */
+export type FileRow = {
+  id: string; name: string; mime: string; size: number; path: string; kind: string; created_at: string;
+  sha256?: string; rights?: string; tags?: string; title?: string; brand?: number; poster_id?: string | null;
+};
 
 const SAFE_EXT: Record<string, string> = {
   "image/png": "png",
@@ -560,17 +771,38 @@ const SAFE_EXT: Record<string, string> = {
   "video/quicktime": "mov",
 };
 
-export function saveFileBuffer(buf: Buffer, name: string, mime: string, kind = "upload"): FileRow {
+/* The same bytes, however they arrived. A sync that re-runs, a shoot uploaded twice, a poster
+   remade from the same inputs — all of them produce a byte-identical file under a new name and
+   a new id, and nothing but a hash can tell. */
+export const hashBuffer = (buf: Buffer): string => createHash("sha256").update(buf).digest("hex");
+
+export function findByHash(sha: string): FileRow | undefined {
+  if (!sha) return undefined;
+  return getDb().prepare("SELECT * FROM files WHERE sha256 = ? LIMIT 1").get(sha) as FileRow | undefined;
+}
+
+/* Saves the bytes and returns the row.
+
+   `dedupe` makes it return the file already holding these bytes instead of writing a second
+   copy. It is off by default because some callers genuinely want their own row — a poster
+   rendered twice is two posters even if the pixels match — and silently handing back someone
+   else's row would be the wrong kind of clever. The callers that want it ask. */
+export function saveFileBuffer(buf: Buffer, name: string, mime: string, kind = "upload", opts: { dedupe?: boolean } = {}): FileRow {
+  const sha = hashBuffer(buf);
+  if (opts.dedupe) {
+    const had = findByHash(sha);
+    if (had) return had;
+  }
   const id = newId();
   const ext = SAFE_EXT[mime] || (name.includes(".") ? name.split(".").pop()!.toLowerCase().replace(/[^a-z0-9]/g, "") : "bin");
   const rel = `${id}.${ext}`;
-  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-  fs.writeFileSync(path.join(UPLOAD_DIR, rel), buf);
+  fs.mkdirSync(uploadDir(), { recursive: true });
+  fs.writeFileSync(path.join(uploadDir(), rel), buf);
   const row: FileRow = { id, name, mime, size: buf.length, path: rel, kind, created_at: now() };
   getDb()
-    .prepare("INSERT INTO files (id, name, mime, size, path, kind, created_at) VALUES (@id, @name, @mime, @size, @path, @kind, @created_at)")
-    .run(row);
-  return row;
+    .prepare("INSERT INTO files (id, name, mime, size, path, kind, created_at, sha256) VALUES (@id, @name, @mime, @size, @path, @kind, @created_at, @sha256)")
+    .run({ ...row, sha256: sha });
+  return { ...row, sha256: sha };
 }
 
 export function getFile(id: string): FileRow | undefined {
@@ -580,7 +812,7 @@ export function getFile(id: string): FileRow | undefined {
 export function readFileBase64(id: string): { mime: string; data: string } | null {
   const f = getFile(id);
   if (!f) return null;
-  const buf = fs.readFileSync(path.join(UPLOAD_DIR, f.path));
+  const buf = fs.readFileSync(path.join(uploadDir(), f.path));
   return { mime: f.mime, data: buf.toString("base64") };
 }
 
@@ -620,7 +852,7 @@ export function deleteFile(id: string): DeleteFileResult {
   const f = getFile(id);
   if (!f) return "missing";
   if (fileOwners(id).length) return "in_use";
-  const full = path.join(UPLOAD_DIR, f.path);
+  const full = path.join(uploadDir(), f.path);
   if (fs.existsSync(full)) {
     try {
       fs.unlinkSync(full);

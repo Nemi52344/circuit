@@ -3,34 +3,37 @@ import { useCallback, useEffect, useState } from "react";
 import { api, postJson } from "@/lib/api";
 import { useToast, Empty } from "@/components/ui";
 import { useMe } from "@/components/Gate";
+import { ROLES, asRole, can, type Role } from "@/lib/roles";
 
-/* Who can use Circuit, and who can sign things off.
+/* Who can use Circuit, and what each of them may do.
 
-   Two roles and no more. Marketing does the work — plans, researches, drafts, schedules.
-   Admin does all of that and signs posts off. A longer list of permissions would be a longer
-   list of things nobody configures correctly. */
+   Five roles. The one that matters is approver: somebody who can sign work off and cannot make
+   any of it. Separating those two is the only thing that makes a sign-off mean anything —
+   otherwise the person who wrote the post is also the person who decided it was ready, which
+   is one person twice rather than two people. */
 
-type User = { id: string; name: string; email: string; role: "admin" | "marketing"; active: number; created_at: string };
+type User = { id: string; name: string; email: string; role: Role; active: number; created_at: string };
 
 export default function PeoplePage() {
   const { me } = useMe();
   const [users, setUsers] = useState<User[]>([]);
-  const [add, setAdd] = useState({ name: "", email: "", role: "marketing" as "admin" | "marketing", password: "" });
+  const [add, setAdd] = useState({ name: "", email: "", role: "creator" as Role, password: "" });
   const [reset, setReset] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const { push, view } = useToast();
 
   const load = useCallback(() => api<{ users: User[] }>("/api/users").then((r) => setUsers(r.users)).catch(() => null), []);
+  const labelOf = (r: string) => ROLES.find((x) => x.role === asRole(r)) || ROLES[ROLES.length - 1];
   useEffect(() => { load(); }, [load]);
 
-  const admin = me?.role === "admin";
+  const admin = can(me, "people");
 
   const create = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
     try {
       await postJson("/api/users", add);
-      setAdd({ name: "", email: "", role: "marketing", password: "" });
+      setAdd({ name: "", email: "", role: "creator", password: "" });
       push("Added. Tell them their password in person, not over email.", "ok");
       load();
     } catch (err) { push((err as Error).message, "bad"); } finally { setBusy(false); }
@@ -48,8 +51,9 @@ export default function PeoplePage() {
         <div>
           <h2>People</h2>
           <p className="lede">
-            Marketing does the work. Admin does the work and signs posts off. Nothing goes public without an admin,
-            because publishing cannot be undone — Instagram has no delete at all.
+            Nothing goes public without somebody who can sign it off, because publishing cannot be undone —
+            Instagram has no delete at all. An approver signs work off and cannot make any of it, which is the
+            point: otherwise the person who wrote the post is also the person who decided it was ready.
           </p>
         </div>
       </div>
@@ -65,22 +69,25 @@ export default function PeoplePage() {
                   <tr key={u.id}>
                     <td className="strong">{u.name}{u.id === me?.id ? <span className="small muted"> · you</span> : null}</td>
                     <td className="muted">{u.email}</td>
-                    <td>{u.role === "admin" ? "Admin" : "Marketing"}</td>
+                    <td>
+                      <strong>{labelOf(u.role).label}</strong>
+                      <div className="small muted">{labelOf(u.role).what}</div>
+                    </td>
                     <td className={u.active ? "" : "muted"}>{u.active ? "Active" : "Switched off"}</td>
                     {admin ? (
                       <td>
                         <span className="actions">
-                          <button className="btn small ghost" type="button"
-                            onClick={() => patch({ id: u.id, role: u.role === "admin" ? "marketing" : "admin" }, "Role changed")}>
-                            Make {u.role === "admin" ? "marketing" : "admin"}
-                          </button>
+                          <select className="input small" aria-label={`Role for ${u.name}`} value={asRole(u.role)}
+                            onChange={(e) => patch({ id: u.id, role: e.target.value }, "Role changed")}>
+                            {ROLES.map((r) => <option key={r.role} value={r.role}>{r.label}</option>)}
+                          </select>
                           <button className="btn small ghost" type="button"
                             onClick={() => patch({ id: u.id, active: !u.active }, u.active ? "Switched off" : "Switched on")}>
                             {u.active ? "Switch off" : "Switch on"}
                           </button>
                         </span>
                         <span className="actions" style={{ marginTop: 6 }}>
-                          <input className="input" type="password" placeholder="New password"
+                          <input className="input" type="password" placeholder="New password" aria-label="New password for this person"
                             value={reset[u.id] || ""} onChange={(e) => setReset((r) => ({ ...r, [u.id]: e.target.value }))} />
                           <button className="btn small" type="button" disabled={!reset[u.id]}
                             onClick={() => { patch({ id: u.id, password: reset[u.id] }, "Password changed — their other sessions have ended"); setReset((r) => ({ ...r, [u.id]: "" })); }}>
@@ -111,9 +118,8 @@ export default function PeoplePage() {
             </label>
             <label className="field">
               <span className="eyebrow">Role</span>
-              <select className="select" value={add.role} onChange={(e) => setAdd({ ...add, role: e.target.value as "admin" | "marketing" })}>
-                <option value="marketing">Marketing — does the work</option>
-                <option value="admin">Admin — also signs off</option>
+              <select className="select" value={add.role} onChange={(e) => setAdd({ ...add, role: e.target.value as Role })}>
+                {ROLES.map((r) => <option key={r.role} value={r.role}>{r.label} — {r.what.toLowerCase()}</option>)}
               </select>
             </label>
             <label className="field">

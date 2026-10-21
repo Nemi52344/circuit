@@ -27,6 +27,9 @@ export type ImportItem = {
   format: string;
   notes: string;
   rights?: string;
+  /* The moving picture, when there is one. `image` stays the poster frame either way, so a
+     grid has something to draw before anybody presses play. */
+  video?: string | null;
   /* a stable id for "already saved", when the image URL itself changes on every fetch */
   origin?: string;
 };
@@ -407,7 +410,31 @@ export function localImagePath(p: string) {
 }
 export function mimeFor(name: string) {
   const ext = (name.split(".").pop() || "").toLowerCase();
-  return ({ jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp", gif: "image/gif", avif: "image/avif" } as Record<string, string>)[ext] || "application/octet-stream";
+  return ({
+    jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp", gif: "image/gif", avif: "image/avif",
+    mp4: "video/mp4", mov: "video/quicktime", m4v: "video/x-m4v", webm: "video/webm",
+  } as Record<string, string>)[ext] || "application/octet-stream";
+}
+
+/* A reel is tens of megabytes where a still is hundreds of kilobytes, so it gets its own
+   ceiling rather than riding on the image one. Past this it is not worth the disk. */
+const MAX_VIDEO_BYTES = 60_000_000;
+
+/* Fetches the MP4 behind a reel and stores it. Returns null rather than throwing: a swipe file
+   is still useful with the poster alone, and losing the whole row because a CDN link had
+   already expired would be the worse trade. */
+export async function saveVideo(url: string): Promise<string | null> {
+  try {
+    const r = await fetchUrl(url, { accept: "video/mp4,video/*;q=0.9,*/*;q=0.8", maxBytes: MAX_VIDEO_BYTES, timeoutMs: 60000 });
+    if (!r.ok) return null;
+    const ct = r.contentType.split(";")[0].trim();
+    const name = decodeURIComponent(path.basename(new URL(url).pathname)) || "video.mp4";
+    const mime = ct.startsWith("video/") ? ct : mimeFor(name);
+    if (!mime.startsWith("video/")) return null;
+    return saveFileBuffer(r.buffer, /\.(mp4|mov|m4v|webm)$/i.test(name) ? name : `${name}.mp4`, mime, "inspiration", { dedupe: true }).id;
+  } catch {
+    return null;
+  }
 }
 
 /* ---------- Import: download or copy, store with provenance, skip what is already there ---------- */
@@ -415,7 +442,7 @@ export function mimeFor(name: string) {
 export async function importItems(items: ImportItem[]) {
   const db = getDb();
   const insert = db.prepare(
-    "INSERT INTO inspirations (id, title, competitor, platform, format, source_url, notes, file_id, rights, origin, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO inspirations (id, title, competitor, platform, format, source_url, notes, file_id, video_file_id, rights, origin, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
   );
   const exists = db.prepare("SELECT id FROM inspirations WHERE origin = ? LIMIT 1");
   const created: { id: string; title: string }[] = [];
@@ -430,7 +457,7 @@ export async function importItems(items: ImportItem[]) {
       if (it.path) {
         const abs = localImagePath(it.path);
         const buf = fs.readFileSync(abs);
-        fileId = saveFileBuffer(buf, path.basename(abs), mimeFor(abs), "inspiration").id;
+        fileId = saveFileBuffer(buf, path.basename(abs), mimeFor(abs), "inspiration", { dedupe: true }).id;
       } else if (it.image) {
         const r = await fetchUrl(it.image, { accept: "image/avif,image/webp,image/*,*/*;q=0.8", maxBytes: 15_000_000, timeoutMs: 20000 });
         if (!r.ok) throw new Error(`image download failed (HTTP ${r.status})`);
@@ -438,13 +465,22 @@ export async function importItems(items: ImportItem[]) {
         const mime = ct.startsWith("image/") ? ct : mimeFor(new URL(it.image).pathname);
         if (!mime.startsWith("image/")) throw new Error(`not an image (${ct || "unknown type"})`);
         const name = decodeURIComponent(path.basename(new URL(it.image).pathname)) || "image";
-        fileId = saveFileBuffer(r.buffer, IMAGE_EXT.test(name) ? name : `${name}.${mime.split("/")[1] === "jpeg" ? "jpg" : mime.split("/")[1]}`, mime, "inspiration").id;
+        fileId = saveFileBuffer(r.buffer, IMAGE_EXT.test(name) ? name : `${name}.${mime.split("/")[1] === "jpeg" ? "jpg" : mime.split("/")[1]}`, mime, "inspiration", { dedupe: true }).id;
       } else if (!it.link) {
         throw new Error("no image and no link");
       }
+      /* The video is fetched after the poster and never instead of it, so a reel whose MP4 has
+         already expired still lands as a still rather than failing outright. */
+      const videoId = it.video ? await saveVideo(it.video) : null;
       const id = newId();
+      /* The rights line belongs on the file as well as the row: the Library is where somebody
+         will meet this picture months later, with no idea whose it was. */
+      const rights = it.rights || DEFAULT_RIGHTS;
+      for (const fid of [fileId, videoId]) {
+        if (fid) getDb().prepare("UPDATE files SET rights = ? WHERE id = ? AND COALESCE(rights,'') = ''").run(rights, fid);
+      }
       const title = (it.title || (it.path ? path.basename(it.path).replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ") : "Untitled")).slice(0, 160);
-      insert.run(id, title, it.competitor || "", it.source || "", it.format || "", it.link || "", it.notes || "", fileId, it.rights || DEFAULT_RIGHTS, origin, now());
+      insert.run(id, title, it.competitor || "", it.source || "", it.format || "", it.link || "", it.notes || "", fileId, videoId, it.rights || DEFAULT_RIGHTS, origin, now());
       created.push({ id, title });
     } catch (e) {
       errors.push({ title: it.title, error: (e as Error).message });

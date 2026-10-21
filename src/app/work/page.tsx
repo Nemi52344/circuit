@@ -14,6 +14,14 @@ const DAY = 86400000;
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 const days = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / DAY);
 
+/* Who could do a piece of work. Stored as "", "person" or "app"; shown in words, because a
+   dropdown containing a blank line and the word "app" tells nobody anything. */
+const DOABLE: { v: string; label: string }[] = [
+  { v: "", label: "not said yet" },
+  { v: "person", label: "a person has to" },
+  { v: "app", label: "Circuit could do this" },
+];
+
 const RANGES = [
   { key: "month", label: "This month", back: 0, len: 1 },
   { key: "quarter", label: "Three months", back: 0, len: 3 },
@@ -28,10 +36,11 @@ export default function WorkPage() {
   const [range, setRange] = useState("quarter");
   const [open, setOpen] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [size, setSize] = useState(0);
   const { push, view } = useToast();
 
-  const load = useCallback(() => api<{ tasks: Task[]; statuses: string[]; areas: string[] }>("/api/work")
-    .then((d) => { setTasks(d.tasks); setStatuses(d.statuses); setAreas(d.areas); })
+  const load = useCallback(() => api<{ tasks: Task[]; statuses: string[]; areas: string[]; programme_size: number }>("/api/work")
+    .then((d) => { setTasks(d.tasks); setStatuses(d.statuses); setAreas(d.areas); setSize(d.programme_size || 0); })
     .catch((e: Error) => push(e.message, "bad")), [push]);
   useEffect(() => { load(); }, [load]);
 
@@ -69,6 +78,21 @@ export default function WorkPage() {
     } catch (e) {
       push((e as Error).message, "bad");
     } finally { setBusy(false); }
+  };
+
+  /* Everything marketing puts out, rather than only what this company has already started. The
+     value is the gaps: a board built from what is happening cannot show you that nobody has
+     made a spec sheet, because not making one leaves no record to read. */
+  const programme = async () => {
+    if (!confirm(`Put the standard list of marketing work on the board — ${size || "about fifty"} things to make, across showroom print, outdoor and dealer, social, digital, the sales kit, events and identity?\n\nIt is a list to cut down, not a report. Anything already on the board with the same name is left alone.`)) return;
+    setBusy(true);
+    try {
+      const r = await postJson<{ added: number; skipped: number }>("/api/work", { action: "programme" });
+      push(r.added
+        ? `${r.added} added${r.skipped ? `, ${r.skipped} already on the board` : ""} — edit or remove what you do not make`
+        : "All of it is already on the board", r.added ? "ok" : "");
+      load();
+    } catch (e) { push((e as Error).message, "bad"); } finally { setBusy(false); }
   };
 
   const drop = async (t: Task) => {
@@ -128,14 +152,22 @@ export default function WorkPage() {
       <div className="page-head">
         <div>
           <h2>Work</h2>
-          <p className="lede">Everything on the go, as a chart — what overlaps, what is late, what nobody has started yet.</p>
+          <p className="lede">
+            Everything on the go, as a chart — what overlaps, what is late, what nobody has started yet.
+            “Fill from what's happening” reads your own data; “Add the standard list” lays out everything marketing
+            puts out — brochures, standees, hoardings, reels, dealer kits — so the gaps show up too.
+          </p>
         </div>
         <span className="actions">
-          <select className="input" value={range} onChange={(e) => setRange(e.target.value)} style={{ minHeight: 38, width: "auto" }}>
+          <select className="input" aria-label="How far ahead to show" value={range} onChange={(e) => setRange(e.target.value)} style={{ minHeight: 38, width: "auto" }}>
             {RANGES.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
           </select>
           <button className="btn" type="button" disabled={busy} onClick={fill} title="Reads the calendar, what Circuit has flagged, and its build queue">
             {busy ? "Working…" : "Fill from what's happening"}
+          </button>
+          <button className="btn" type="button" disabled={busy} onClick={programme}
+            title="Brochures, standees, hoardings, reels, dealer kits — everything marketing puts out. A list to cut down, not a report.">
+            Add the standard list
           </button>
           <button className="btn primary" type="button" disabled={busy} onClick={add}>Add work</button>
         </span>
@@ -203,6 +235,14 @@ export default function WorkPage() {
               <label className="field"><span>Where it sits</span><Cell value={t.area} onSave={(v) => save({ id: t.id, area: v })} options={areas} /></label>
               <label className="field"><span>How it is going</span><Cell value={t.status} onSave={(v) => save({ id: t.id, status: v })} options={statuses} /></label>
               <label className="field"><span>How far along (%)</span><Cell value={t.progress} onSave={(v) => save({ id: t.id, progress: Math.max(0, Math.min(100, Number(v) || 0)) })} type="number" align="num" /></label>
+              <label className="field"><span>Should take (minutes)</span><Cell value={t.estimate_minutes ?? ""} onSave={(v) => save({ id: t.id, estimate_minutes: Math.max(0, Number(v) || 0) })} type="number" align="num" placeholder="0" /></label>
+              <label className="field"><span>Actually took (minutes)</span><Cell value={t.spent_minutes ?? ""} onSave={(v) => save({ id: t.id, spent_minutes: Math.max(0, Number(v) || 0) })} type="number" align="num" placeholder="0" /></label>
+              <label className="field"><span>Who could do it</span>
+                <select className="input" style={{ minHeight: 30, padding: "0 6px", fontSize: 13 }}
+                  value={t.doable_by || ""} onChange={(e) => save({ id: t.id, doable_by: e.target.value })}>
+                  {DOABLE.map((d) => <option key={d.v} value={d.v}>{d.label}</option>)}
+                </select>
+              </label>
             </div>
             <label className="field"><span>Notes</span>
               <Cell value={t.notes} onSave={(v) => save({ id: t.id, notes: v })} placeholder="anything worth remembering" />

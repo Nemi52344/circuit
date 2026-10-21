@@ -1,7 +1,7 @@
 import { spawn } from "child_process";
 import fs from "fs";
 import path from "path";
-import { getDb, newId, now, UPLOAD_DIR, getFile } from "@/lib/db";
+import { getDb, newId, now, uploadDir, getFile } from "@/lib/db";
 import { runChatGptJson } from "@/lib/chatgpt";
 
 /* Reading a credit card statement.
@@ -81,7 +81,7 @@ export async function readStatement(fileId: string, name: string): Promise<{ sta
   const db = getDb();
   const row = getFile(fileId);
   if (!row) throw new Error("That file is not in the library any more");
-  const full = path.join(UPLOAD_DIR, row.path);
+  const full = path.join(uploadDir(), row.path);
   const text = await textOf(full);
   if (text.trim().length < 40) throw new Error("There is no text in that PDF — it may be a scan, which cannot be read this way");
 

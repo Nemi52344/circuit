@@ -125,7 +125,7 @@ export function adRange(v?: { lower_bound?: string; upper_bound?: string }) {
    Needs the user's own Instagram professional account id and a token with instagram_basic.
    Returns each competitor's latest posts with likes and comments, and flags the ones doing
    unusually well for that account (at least twice its median engagement). */
-export type IgPost = { caption: string; likes: number; comments: number; type: string; permalink: string; timestamp: string; media_url: string; standout: boolean };
+export type IgPost = { caption: string; likes: number; comments: number; type: string; permalink: string; timestamp: string; media_url: string; video_url: string; standout: boolean };
 export type IgAccount = { handle: string; followers: number; posts: IgPost[] };
 
 export async function igCompetitorPosts(handle: string, limit = 12): Promise<IgAccount> {
@@ -146,7 +146,19 @@ export async function igCompetitorPosts(handle: string, limit = 12): Promise<IgA
     posts: media.map((m) => {
       const e = (m.like_count || 0) + (m.comments_count || 0);
       const type = m.media_product_type === "REELS" ? "Reel" : m.media_type === "CAROUSEL_ALBUM" ? "Carousel" : m.media_type === "VIDEO" ? "Video" : "Static post";
-      return { caption: (m.caption || "").slice(0, 400), likes: m.like_count || 0, comments: m.comments_count || 0, type, permalink: m.permalink || "", timestamp: m.timestamp || "", media_url: m.thumbnail_url || m.media_url || "", standout: median > 0 && e >= 2 * median };
+      /* For anything that moves, Instagram hands back two things: thumbnail_url, a poster
+         frame, and media_url, the MP4 itself. Preferring the thumbnail and stopping there is
+         why every saved reel was a still. Both are carried now — the poster to show in a grid,
+         the video to actually watch. A photo has no thumbnail_url, so media_url is the image
+         and video_url stays empty. */
+      const moving = m.media_type === "VIDEO" || m.media_product_type === "REELS";
+      return {
+        caption: (m.caption || "").slice(0, 400), likes: m.like_count || 0, comments: m.comments_count || 0,
+        type, permalink: m.permalink || "", timestamp: m.timestamp || "",
+        media_url: m.thumbnail_url || m.media_url || "",
+        video_url: moving ? m.media_url || "" : "",
+        standout: median > 0 && e >= 2 * median,
+      };
     }),
   };
 }

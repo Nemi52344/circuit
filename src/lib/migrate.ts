@@ -103,6 +103,216 @@ export const MIGRATIONS: Migration[] = [
         CREATE INDEX IF NOT EXISTS idx_files_brand ON files(brand);`);
     },
   },
+  {
+    id: 5,
+    name: "inspirations can hold the video, not just its poster frame",
+    up: (db) => {
+      /* A reel arrived as a single JPEG, because the Instagram read asked for thumbnail_url
+         first and dropped media_url — the MP4 — on the floor. The still was all that was ever
+         saved, so half the swipe file was a wall of frozen first frames with no way to see
+         what the thing actually did. The poster stays in file_id, where every existing row
+         already has it; the video goes here, beside it. */
+      addColumn(db, "inspirations", "video_file_id", "TEXT");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_inspirations_video ON inspirations(video_file_id);");
+    },
+  },
+  {
+    id: 6,
+    name: "a creation carries the checks made before it was approved",
+    up: (db) => {
+      /* Four things somebody has to actually look at before a picture goes out: is the product
+         right, is the logo right, can the words be read, and are we allowed to use it. They
+         were being carried in somebody's head, which is where they stay until the one time
+         they do not. Stored as JSON on the creation so the answer travels with the picture. */
+      addColumn(db, "creations", "qa", "TEXT NOT NULL DEFAULT ''");
+    },
+  },
+  {
+    id: 7,
+    name: "a file knows what it is allowed to be used for, and whether it is already here",
+    up: (db) => {
+      /* Inspirations have carried a rights line since early on; the files they produce never
+         did. So a picture could be lifted out of the library months later with nothing on it
+         to say it was a competitor's and must not be published. */
+      addColumn(db, "files", "rights", "TEXT NOT NULL DEFAULT ''");
+
+      /* The same picture arriving twice is not a hypothetical: a sync re-runs, somebody
+         re-uploads a shoot, a poster gets remade. A hash of the bytes is the only way to know
+         it is the same picture when the name, the date and the id all differ. Existing rows
+         have none and are filled in as they are touched, so the column means "what we have
+         hashed so far" rather than "all of them". */
+      addColumn(db, "files", "sha256", "TEXT NOT NULL DEFAULT ''");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_files_sha ON files(sha256);");
+    },
+  },
+  {
+    id: 8,
+    name: "files inherit the rights line of the inspiration they came from",
+    up: (db) => {
+      /* Every saved inspiration already carries a rights line — usually "Third-party.
+         Reference only, do not publish." The file underneath it never did, so the moment a
+         picture was looked at in the Library rather than in Inspiration, that warning was
+         gone. The files know now, for everything already here. */
+      db.exec(`
+        UPDATE files SET rights = (
+          SELECT i.rights FROM inspirations i
+          WHERE (i.file_id = files.id OR i.video_file_id = files.id) AND COALESCE(i.rights, '') != ''
+          LIMIT 1
+        )
+        WHERE COALESCE(rights, '') = ''
+          AND EXISTS (
+            SELECT 1 FROM inspirations i
+            WHERE (i.file_id = files.id OR i.video_file_id = files.id) AND COALESCE(i.rights, '') != ''
+          );`);
+
+      /* Anything the brand made is ours to publish, and saying so is what makes the field
+         useful rather than a column that is blank on nine rows in ten. */
+      db.exec(`UPDATE files SET rights = 'Ours, free to publish'
+               WHERE COALESCE(rights, '') = '' AND (brand = 1 OR kind IN ('product', 'generated', 'export', 'own_post'));`);
+
+      /* Briefings, invoices and statements are not creative: they are the company's own
+         paperwork, and the warning they need is the opposite one. */
+      db.exec(`UPDATE files SET rights = 'Internal. Not for publication.'
+               WHERE COALESCE(rights, '') = '' AND kind IN ('intel', 'bill', 'statement', 'receipt', 'document');`);
+    },
+  },
+  {
+    id: 9,
+    name: "an agent remembers whether it last worked",
+    up: (db) => {
+      /* Seven agents are defined and nothing anywhere said which of them had ever run, let
+         alone whether it succeeded. "Which bots are working" was a question the app held all
+         the parts to answer and could not. */
+      addColumn(db, "agents", "last_run", "TEXT NOT NULL DEFAULT ''");
+      addColumn(db, "agents", "last_ok", "INTEGER");
+      addColumn(db, "agents", "last_error", "TEXT NOT NULL DEFAULT ''");
+      addColumn(db, "agents", "last_seconds", "INTEGER NOT NULL DEFAULT 0");
+      addColumn(db, "agents", "runs", "INTEGER NOT NULL DEFAULT 0");
+      addColumn(db, "agents", "fails", "INTEGER NOT NULL DEFAULT 0");
+    },
+  },
+  {
+    id: 10,
+    name: "a published post can be kept as a model or set aside",
+    up: (db) => {
+      /* The app reads what its own posts did and draws conclusions from them. What it could
+         not do was take a correction: a post that did well for a reason that will not repeat —
+         a festival, a cricket result, somebody else's news — still pulled the advice towards
+         itself, and there was no way to say "not that one".
+
+         "keep" marks a post as a model worth suggesting from. "set aside" takes it out of the
+         learning without deleting it, because the numbers are still true, they are just not a
+         lesson. Null is the normal state: nobody has said either way. */
+      addColumn(db, "own_posts", "verdict", "TEXT NOT NULL DEFAULT ''");
+      addColumn(db, "own_posts", "verdict_why", "TEXT NOT NULL DEFAULT ''");
+      addColumn(db, "own_posts", "verdict_at", "TEXT NOT NULL DEFAULT ''");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_own_posts_verdict ON own_posts(verdict);");
+    },
+  },
+  {
+    id: 11,
+    name: "work carries how long it was expected to take, and how long it did",
+    up: (db) => {
+      /* Circuit could say what it had done and never how long any of it took. That made one
+         question unanswerable — what proportion of marketing actually runs by itself — and it
+         is the question the whole automation effort exists to answer.
+
+         Two numbers per task, both in minutes, both optional. An estimate is a guess made
+         before; spent is what it really was. Neither is required, because a queue that
+         refuses work without a time estimate is a queue people stop using. */
+      addColumn(db, "tasks", "estimate_minutes", "INTEGER NOT NULL DEFAULT 0");
+      addColumn(db, "tasks", "spent_minutes", "INTEGER NOT NULL DEFAULT 0");
+      /* Whether this is work a person must do, or work the app could take over. Left blank
+         until somebody says, because guessing it would make the automation figure a fiction. */
+      addColumn(db, "tasks", "doable_by", "TEXT NOT NULL DEFAULT ''");
+    },
+  },
+  {
+    id: 12,
+    name: "a creation can be talked about, and its earlier versions found",
+    up: (db) => {
+      /* Two people looking at the same picture had nowhere to disagree.
+
+         Rejecting it recorded that it was rejected and not one word about why, so the next
+         round repeated the same mistake. A note is attached to the creation rather than kept
+         in a chat, because the reason a picture was turned down is only useful next to the
+         picture.
+
+         Versions already existed — iterating a draft has been writing parent_id and round
+         since September — but nothing ever read them back, so a round-two picture looked
+         exactly like an unrelated one. Nothing to migrate: the chains are already in the
+         table, and this is the index that makes walking them cheap. */
+      db.exec(`CREATE TABLE IF NOT EXISTS creation_notes (
+        id TEXT PRIMARY KEY,
+        creation_id TEXT NOT NULL,
+        author TEXT NOT NULL DEFAULT '',
+        body TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      )`);
+      db.exec("CREATE INDEX IF NOT EXISTS creation_notes_on ON creation_notes (creation_id, created_at)");
+      db.exec("CREATE INDEX IF NOT EXISTS creations_parent ON creations (parent_id)");
+    },
+  },
+  {
+    id: 13,
+    name: "a post can carry a tagged link to the website",
+    up: (db) => {
+      /* A post that sends people to the website had no way of saying so, which made the one
+         question worth asking about it — did anybody go — unanswerable.
+
+         Three columns, not a table: a post links to at most one place, and a join for a single
+         string is a table nobody would thank us for. Source and medium are not stored because
+         they follow from the platform; storing them would let them drift out of agreement with
+         the post they describe. */
+      addColumn(db, "posts", "link_url", "TEXT NOT NULL DEFAULT ''");
+      addColumn(db, "posts", "utm_campaign", "TEXT NOT NULL DEFAULT ''");
+      addColumn(db, "posts", "utm_content", "TEXT NOT NULL DEFAULT ''");
+    },
+  },
+  {
+    id: 14,
+    name: "a post can repeat on a schedule",
+    up: (db) => {
+      /* The things that go out every week whether or not anybody plans them — Thursday's reel,
+         the dealer post on the first of the month. They were being typed in one at a time, and
+         the ones that got missed were missed quietly.
+
+         A series writes posts; it does not become one. Each generated post is an ordinary draft
+         that can be edited, moved or deleted without the series arguing, because a calendar that
+         keeps restoring what you removed is worse than one that forgets. The series_id is there
+         so Circuit knows what it already made, and so a post survives its series being deleted. */
+      db.exec(`CREATE TABLE IF NOT EXISTS series (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        platform TEXT NOT NULL,
+        cadence TEXT NOT NULL DEFAULT 'weekly',
+        weekday INTEGER NOT NULL DEFAULT 4,
+        day_of_month INTEGER NOT NULL DEFAULT 1,
+        at_time TEXT NOT NULL DEFAULT '18:30',
+        caption TEXT NOT NULL DEFAULT '',
+        notes TEXT NOT NULL DEFAULT '',
+        active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`);
+      addColumn(db, "posts", "series_id", "TEXT");
+      db.exec("CREATE INDEX IF NOT EXISTS posts_series ON posts (series_id, scheduled_at)");
+    },
+  },
+  {
+    id: 15,
+    name: "a repeating post can carry a picture of its own",
+    up: (db) => {
+      /* A series was making drafts with nothing on them. Eight Thursdays of a blank post is
+         eight things to open and fill in, which is the work the series was supposed to remove.
+
+         The picture is chosen once on the series and copied onto each draft, rather than the
+         draft pointing back at the series: a draft is meant to be editable, and a post that
+         silently changed picture because somebody edited the series months later would be a
+         change nobody asked for and nobody would see. */
+      addColumn(db, "series", "file_id", "TEXT");
+    },
+  },
 ];
 
 export type Applied = { id: number; name: string; at: string };

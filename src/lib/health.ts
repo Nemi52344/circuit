@@ -1,10 +1,10 @@
 import fs from "node:fs";
-import { getDb, getSetting, UPLOAD_DIR } from "@/lib/db";
+import { getDb, getSetting, uploadDir } from "@/lib/db";
 import { chatgptStatus } from "@/lib/chatgpt";
 import { getMetaToken, callMeta } from "@/lib/meta";
 import { lastIgSync } from "@/lib/igsync";
 import { lastBackup } from "@/lib/backup";
-import { startWorker, kickWorker } from "@/lib/worker";
+import { startWorker, kickWorker, workerState } from "@/lib/worker";
 
 /* What is working and what has quietly stopped. Circuit runs jobs in the background, so a
    dead token or a signed-out ChatGPT looks exactly like "nothing to do" unless something
@@ -69,6 +69,16 @@ function workerCheck(): Check {
     kickWorker();
     return { key: "worker", label: "Background worker", state: "warn", detail: `It had stopped ${ago(tick)} — probably an app restart. Started again just now.` };
   }
+  /* Whether the last pass WORKED, not merely that it happened. Reporting the time of the last
+     attempt was how a worker that threw on every pass still showed as "ok". */
+  const last = workerState().history[0];
+  if (last && !last.ok) {
+    return {
+      key: "worker", label: "Background worker", state: "bad",
+      detail: `Last pass failed ${ago(last.finished_at)}: ${last.error || last.label}`,
+      fix: { label: "Work", href: "/work" },
+    };
+  }
   return { key: "worker", label: "Background worker", state: "ok", detail: `Checked ${ago(tick)}.` };
 }
 
@@ -98,7 +108,7 @@ function setupCheck(): Check[] {
   const db = getDb();
   const products = (db.prepare("SELECT COUNT(*) n FROM products").get() as { n: number }).n;
   const approvers = (db.prepare("SELECT COUNT(*) n FROM approvers WHERE active = 1").get() as { n: number }).n;
-  const size = fs.existsSync(UPLOAD_DIR) ? fs.readdirSync(UPLOAD_DIR).reduce((a, f) => a + fs.statSync(`${UPLOAD_DIR}/${f}`).size, 0) : 0;
+  const size = fs.existsSync(uploadDir()) ? fs.readdirSync(uploadDir()).reduce((a, f) => a + fs.statSync(`${uploadDir()}/${f}`).size, 0) : 0;
   return [
     products
       ? { key: "products", label: "Bike photos", state: products < 2 ? "warn" : "ok", detail: products < 2 ? "Only one photo, so every draft is built from the same picture." : `${products} photos ready.`, fix: { label: "Settings", href: "/settings" } }

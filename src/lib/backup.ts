@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { DATA_DIR, UPLOAD_DIR, getDb, getSetting, setSetting, now } from "@/lib/db";
+import { DATA_DIR, uploadDir, getDb, getSetting, setSetting, now } from "@/lib/db";
 
 /* A copy of everything, made by the app itself once a day. The database is copied properly
    (sqlite's own backup, safe while the app is writing); the uploaded pictures are hard-linked
@@ -27,8 +27,8 @@ function mirrorUploads() {
   const dest = path.join(BACKUP_DIR, "uploads");
   fs.mkdirSync(dest, { recursive: true });
   let linked = 0;
-  for (const name of fs.existsSync(UPLOAD_DIR) ? fs.readdirSync(UPLOAD_DIR) : []) {
-    const from = path.join(UPLOAD_DIR, name);
+  for (const name of fs.existsSync(uploadDir()) ? fs.readdirSync(uploadDir()) : []) {
+    const from = path.join(uploadDir(), name);
     const to = path.join(dest, name);
     if (fs.existsSync(to)) continue;
     try { fs.linkSync(from, to); linked++; } catch { try { fs.copyFileSync(from, to); linked++; } catch { /* skip unreadable */ } }

@@ -1,3 +1,10 @@
+/* The days of the week, spelled the way Circuit writes them.
+
+   Here rather than beside the repeating-post code for the same reason META_SCOPES lives among
+   the types: the calendar is a client component, and reaching into lib/series for one array
+   would pull better-sqlite3 into the browser bundle and break the page. */
+export const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
 /* Festivals and important dates for Indian marketing calendars.
    Lunar festival dates were checked against published 2026 and 2027 calendars (Drik Panchang,
    Samvat, CalendarLabs, IslamicFinder) on 17 Sep 2026. Islamic dates depend on moon sighting and

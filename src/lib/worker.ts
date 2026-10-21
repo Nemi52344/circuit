@@ -1,12 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
-import { getDb, getSetting, setSetting, now, UPLOAD_DIR } from "@/lib/db";
+import { getDb, getSetting, setSetting, now, uploadDir, forEachBrand, listBrands, currentBrand } from "@/lib/db";
 import { runChatGptJson, runChatGptImage, codexPath } from "@/lib/chatgpt";
 import { igSyncDue, syncCompetitorInstagram } from "@/lib/igsync";
 import { backupDue, runBackup } from "@/lib/backup";
 import { insightsDue, syncOwnInstagram } from "@/lib/insights";
 import { autoRenewDue, renewStoredToken } from "@/lib/meta";
 import { dueWorkflows, runWorkflow, seedWorkflows } from "@/lib/workflows";
+import { INTERNAL_HEADER, BRAND_HEADER, internalSecret, selfOrigin } from "@/lib/http";
 
 /* The automatic worker: while Circuit is running it picks up queued text jobs (brand, ideas,
    topics, research, captions) one at a time, asks ChatGPT for the answer, and delivers it through
@@ -22,8 +23,13 @@ declare global {
 }
 const state: State = (global.__circuitWorker ??= { timer: null, busy: false, current: null, history: [], last_check: "" });
 
+const listBrandsCount = () => listBrands().length;
+
 const ORDER = ["brand", "ideas", "topics", "research", "slides", "postercopy", "copy"];
-const base = () => `http://127.0.0.1:${process.env.PORT || 3210}`;
+/* The origin this server answered a real request on, falling back to the configured port only
+   until the first one arrives. Guessing 3210 outright meant a second copy on another port
+   called the first one instead of itself. */
+const base = () => selfOrigin() || `http://127.0.0.1:${process.env.PORT || 3210}`;
 
 export function workerEnabled() {
   return (getSetting("ai_worker") || "chatgpt") === "chatgpt";
@@ -37,7 +43,13 @@ export function workerState() {
 }
 
 async function api(method: string, p: string, body?: unknown) {
-  const r = await fetch(`${base()}${p}`, { method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+  const r = await fetch(`${base()}${p}`, {
+    method,
+    /* Circuit calling itself. Without this the gate sees a request with no cookie and turns it
+       away, which is what silently stopped the queues the day accounts were added. */
+    headers: { "Content-Type": "application/json", [INTERNAL_HEADER]: internalSecret(), [BRAND_HEADER]: currentBrand().slug },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
   const text = await r.text();
   let data: unknown = null;
   try { data = JSON.parse(text); } catch { data = text; }
@@ -185,7 +197,10 @@ async function runOne(job: Job) {
   let ok = true;
   let error = "";
   try {
-    const result = await runChatGptJson(prompt, { search: true, timeoutMs: job.kind === "ideas" ? 20 * 60 * 1000 : 10 * 60 * 1000 });
+    /* Ten minutes was where a copy job died in September and stayed dead. Every kind here
+       searches before it writes, so they all get the longer ceiling; the runner retries once
+       more on top of that if a run stalls. */
+    const result = await runChatGptJson(prompt, { search: true, timeoutMs: (job.kind === "ideas" ? 20 : 15) * 60 * 1000 });
     if (!result || typeof result !== "object" || Array.isArray(result)) throw new Error("ChatGPT's answer wasn't a JSON object");
     await api("POST", deliver, { ...(result as Record<string, unknown>), job_id: job.id });
   } catch (e) {
@@ -203,7 +218,7 @@ type RenderJob = { id: string; prompt: string; reference_file_id: string | null;
 function uploadPath(fileId: string | null) {
   if (!fileId) return null;
   const row = getDb().prepare("SELECT path FROM files WHERE id = ?").get(fileId) as { path: string } | undefined;
-  const p = row ? path.join(UPLOAD_DIR, row.path) : null;
+  const p = row ? path.join(uploadDir(), row.path) : null;
   return p && fs.existsSync(p) ? p : null;
 }
 
@@ -224,7 +239,9 @@ async function renderOne(job: RenderJob) {
     form.append("model", "chatgpt_image");
     form.append("title", "ChatGPT image");
     form.append("files", new Blob([fs.readFileSync(file)], { type: file.endsWith(".png") ? "image/png" : "image/jpeg" }), path.basename(file));
-    const r = await fetch(`${base()}/api/render/deliver`, { method: "POST", body: form });
+    const r = await fetch(`${base()}/api/render/deliver`, {
+      method: "POST", body: form, headers: { [INTERNAL_HEADER]: internalSecret(), [BRAND_HEADER]: currentBrand().slug },
+    });
     if (!r.ok) throw new Error(`Couldn't save the image: HTTP ${r.status} ${(await r.text()).slice(0, 200)}`);
   } catch (e) {
     ok = false;
@@ -236,11 +253,26 @@ async function renderOne(job: RenderJob) {
   state.current = null;
 }
 
+/* One pass, for every brand in turn.
+
+   Each brand has its own calendar, its own queue and its own Instagram, so each needs its own
+   round. The brand is carried on the async context rather than by changing the stored choice,
+   so a page loading while the worker is partway through BOOMA still shows whoever the person
+   actually has selected. */
 export async function tick() {
   if (state.busy || !workerEnabled() || !codexPath()) return;
   state.busy = true;
   state.last_check = now();
+  try {
+    await forEachBrand(async (brand) => { await brandPass(brand.name); });
+  } finally {
+    state.busy = false;
+  }
+}
+
+async function brandPass(brandName: string) {
   setSetting("worker_last_tick", now());
+  const tag = (label: string) => (listBrandsCount() > 1 ? `${brandName}: ${label}` : label);
   try {
     // a copy of the database and the pictures, once a day, without being asked
     if (backupDue()) {
@@ -297,6 +329,8 @@ export async function tick() {
     const renders = ((await api("GET", "/api/render?status=queued&provider=chatgpt")) as RenderJob[]).reverse();
     if (renders[0]) {
       await renderOne(renders[0]);
+      /* Come straight back rather than waiting for the interval — but only after every brand
+         has had its turn, which is why this returns from the brand's pass, not the tick. */
       setTimeout(() => { tick().catch(() => null); }, 1000);
       return;
     }
@@ -309,10 +343,12 @@ export async function tick() {
       setTimeout(() => { tick().catch(() => null); }, 1000);
     }
   } catch (e) {
-    state.history.unshift({ id: "", kind: "check", label: "Checking the queue", ok: false, error: (e as Error).message, started_at: now(), finished_at: now(), seconds: 0 });
+    /* A failed pass is named as one. Calling it "Checking the queue" made ten crashes in a row
+       read like ten routine checks, which is how a broken queue went unnoticed for a week.
+       With more than one brand it says which brand, because "couldn't check the queue" three
+       times over tells you nothing about which books are stuck. */
+    state.history.unshift({ id: "", kind: "check", label: tag("Couldn't check the queue"), ok: false, error: (e as Error).message, started_at: now(), finished_at: now(), seconds: 0 });
     state.history = state.history.slice(0, 30);
-  } finally {
-    state.busy = false;
   }
 }
 

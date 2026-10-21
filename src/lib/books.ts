@@ -15,7 +15,18 @@ export type Task = {
   id: string; title: string; notes: string; owner: string; area: string;
   start_date: string; end_date: string; status: string; progress: number;
   depends_on: string | null; created_at: string; updated_at: string;
+  /* How long this was expected to take, and how long it did. Both in minutes, both optional:
+     a board that refuses work without an estimate is a board people stop using, and a task
+     written before these existed has neither. */
+  estimate_minutes?: number; spent_minutes?: number;
+  /* Whether a person has to do this or the app could. Blank until somebody says — guessing
+     would turn the automation figure into a fiction. */
+  doable_by?: string;
 };
+
+/* Who could do a piece of work. "person" means it needs judgement, a relationship or a pair
+   of hands; "app" means Circuit could take it over and has not yet. */
+export const DOABLE_BY = ["", "person", "app"] as const;
 export type Bill = {
   id: string; vendor: string; number: string; bill_date: string; due_date: string;
   amount: number; tax: number; category: string; status: string; file_id: string | null;
@@ -51,7 +62,8 @@ export function saveTask(t: Partial<Task> & { title?: string }): Task {
   const db = getDb();
   const at = now();
   if (t.id) {
-    const fields = ["title", "notes", "owner", "area", "start_date", "end_date", "status", "progress", "depends_on"] as const;
+    const fields = ["title", "notes", "owner", "area", "start_date", "end_date", "status", "progress", "depends_on",
+                    "estimate_minutes", "spent_minutes", "doable_by"] as const;
     const sets: string[] = [];
     const vals: unknown[] = [];
     for (const f of fields) if (t[f] !== undefined) { sets.push(`${f} = ?`); vals.push(t[f]); }
@@ -62,10 +74,12 @@ export function saveTask(t: Partial<Task> & { title?: string }): Task {
   }
   const id = newId();
   const start = t.start_date || at.slice(0, 10);
-  db.prepare(`INSERT INTO tasks (id, title, notes, owner, area, start_date, end_date, status, progress, depends_on, created_at, updated_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+  db.prepare(`INSERT INTO tasks (id, title, notes, owner, area, start_date, end_date, status, progress, depends_on,
+                                 estimate_minutes, spent_minutes, doable_by, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(id, t.title || "Untitled", t.notes || "", t.owner || "", t.area || "marketing",
-      start, t.end_date || start, t.status || "planned", t.progress ?? 0, t.depends_on || null, at, at);
+      start, t.end_date || start, t.status || "planned", t.progress ?? 0, t.depends_on || null,
+      t.estimate_minutes ?? 0, t.spent_minutes ?? 0, t.doable_by || "", at, at);
   return db.prepare("SELECT * FROM tasks WHERE id = ?").get(id) as Task;
 }
 

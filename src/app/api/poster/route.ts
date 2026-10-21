@@ -13,11 +13,15 @@ export const maxDuration = 300;
 
 export const GET = handle(async () => {
   /* Only the brand's own photography. A poster is the one place a scraped competitor
-     screenshot must never end up, and the library holds plenty of those. */
+     screenshot must never end up, and the library holds plenty of those.
+
+     Circuit's own posters are excluded too. They are saved as brand images, so without this
+     they came back here as "photography" — newest first, which pushed the real photographs
+     past the limit and made a poster of a poster the easiest thing to click. */
   const photos = getDb().prepare(`
     SELECT id, COALESCE(NULLIF(title, ''), name) AS name
     FROM files
-    WHERE brand = 1 AND mime LIKE 'image/%'
+    WHERE brand = 1 AND mime LIKE 'image/%' AND tags NOT LIKE '%made-in-circuit%'
     ORDER BY created_at DESC LIMIT 60`).all();
   return ok({ templates: TEMPLATES, sizes: SIZES, photos });
 });

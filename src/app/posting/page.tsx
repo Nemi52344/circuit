@@ -169,7 +169,7 @@ export default function PostingPage() {
                   : null}
 
                 <div className="po-done">
-                  <input className="input" placeholder="Paste the live link once it is up…"
+                  <input className="input" placeholder="Paste the live link once it is up…" aria-label="Live link to the published post"
                     value={urls[r.id] || ""} onChange={(e) => setUrls({ ...urls, [r.id]: e.target.value })} />
                   <button className="btn" type="button" disabled={busy === r.id} onClick={() => markPosted(r)}>
                     {busy === r.id ? "Saving…" : "It is up"}

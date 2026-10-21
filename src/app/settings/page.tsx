@@ -248,7 +248,7 @@ export default function SettingsPage() {
               <span className="small muted mono" style={{ wordBreak: "break-all" }}>{META_SCOPES.replace(/,/g, "  ")}</span>
             </div>
             <div className="fetch-row">
-              <input className="input" type="password" value={meta} onChange={(e) => setMeta(e.target.value)} placeholder="Paste access token" autoComplete="off" />
+              <input className="input" type="password" value={meta} onChange={(e) => setMeta(e.target.value)} placeholder="Paste access token" aria-label="Meta access token" autoComplete="off" />
               <span className="actions">
                 <button className="btn primary" type="button" disabled={busy} onClick={saveMeta}>Save</button>
                 {s.has_meta ? <button className="btn ghost" type="button" onClick={removeMeta}>Remove</button> : null}
@@ -262,8 +262,8 @@ export default function SettingsPage() {
             <div className="panel-head" style={{ marginBottom: 0 }}><h3>Higgsfield API</h3>{s.has_hf ? <Pill tone="ok">Connected</Pill> : <Pill>Not connected</Pill>}</div>
             <p className="small muted">A separate paid API balance. Get a key at <a href="https://cloud.higgsfield.ai" target="_blank" rel="noreferrer" style={{ textDecoration: "underline" }}>cloud.higgsfield.ai</a>.</p>
             <div className="form-grid">
-              <input className="input" value={hfId} onChange={(e) => setHfId(e.target.value)} placeholder="Key id" autoComplete="off" />
-              <input className="input" type="password" value={hfSecret} onChange={(e) => setHfSecret(e.target.value)} placeholder="Key secret" autoComplete="off" />
+              <input className="input" value={hfId} onChange={(e) => setHfId(e.target.value)} placeholder="Key id" aria-label="Key id" autoComplete="off" />
+              <input className="input" type="password" value={hfSecret} onChange={(e) => setHfSecret(e.target.value)} placeholder="Key secret" aria-label="Key secret" autoComplete="off" />
             </div>
             <div className="actions">
               <button className="btn primary" type="button" disabled={busy} onClick={saveHf}>Save</button>
@@ -277,7 +277,7 @@ export default function SettingsPage() {
             <div className="panel-head" style={{ marginBottom: 0 }}><h3>Google Gemini</h3>{s.has_key ? <Pill tone="ok">Connected</Pill> : <Pill>Not connected</Pill>}</div>
             <p className="small muted">Image creation needs billing turned on for your Google project. Get a key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" style={{ textDecoration: "underline" }}>aistudio.google.com</a>.</p>
             <div className="fetch-row">
-              <input className="input" type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder="Paste API key" autoComplete="off" />
+              <input className="input" type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder="Paste API key" aria-label="API key" autoComplete="off" />
               <span className="actions">
                 <button className="btn primary" type="button" disabled={busy} onClick={saveKey}>Save</button>
                 {s.has_key ? <button className="btn" type="button" disabled={busy} onClick={testSaved}>Test</button> : null}

@@ -24,6 +24,14 @@ const KINDS = [
 ];
 
 const fmtSize = (n: number) => (n > 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.round(n / 1024)} KB`);
+/* The three answers that actually occur. Typing them out every time is how a rights field
+   ends up blank on everything. */
+const RIGHTS_PRESETS = [
+  "Ours, free to publish",
+  "Licensed \u2014 check terms before use",
+  "Third-party. Reference only, do not publish.",
+];
+
 const isImage = (f: FileRow) => f.mime.startsWith("image/");
 const isVideo = (f: FileRow) => f.mime.startsWith("video/");
 
@@ -84,7 +92,7 @@ export default function LibraryPage() {
         : f.kind === kind;
       if (!byKind) return false;
       if (!needle) return true;
-      return `${f.title || ""} ${f.name} ${f.tags || ""} ${f.kind}`.toLowerCase().includes(needle);
+      return `${f.title || ""} ${f.name} ${f.tags || ""} ${f.kind} ${f.rights || ""}`.toLowerCase().includes(needle);
     });
   }, [files, kind, q]);
 
@@ -118,7 +126,7 @@ export default function LibraryPage() {
           </p>
         </div>
         <span className="actions">
-          <input className="input" placeholder="Search name or tag…" value={q} onChange={(e) => setQ(e.target.value)} style={{ minHeight: 38, width: 210 }} />
+          <input className="input" placeholder="Search name, tag or rights…" aria-label="Search the library" value={q} onChange={(e) => setQ(e.target.value)} style={{ minHeight: 38, width: 210 }} />
           <label className="btn primary">{busy ? "Uploading…" : "Add to the store"}<input type="file" accept="image/*,video/*" multiple hidden onChange={upload} disabled={busy} /></label>
         </span>
       </div>
@@ -142,6 +150,10 @@ export default function LibraryPage() {
                 <strong style={{ wordBreak: "break-word" }}>{f.title || f.name}</strong>
                 <p>{fmtSize(f.size)} · {fmtDay(f.created_at)}{isVideo(f) ? " · video" : ""}</p>
                 {f.tags ? <div className="asset-tagline">{f.tags.split(",").map((t) => <span className="tag-chip" key={t}>{t.trim()}</span>)}</div> : null}
+                {/* Six months on, a competitor's screenshot and our own photograph look the
+                    same in a grid. This line is the only thing that tells them apart, so it
+                    shows on the card rather than hiding behind an edit panel. */}
+                {f.rights ? <p className="rights-line">{f.rights}</p> : null}
                 <div className="row">
                   {isImage(f) ? <button className="btn small" type="button" onClick={() => setAt(pics.findIndex((x) => x.id === f.id))}>View</button> : null}
                   <button className="btn small ghost" type="button" onClick={() => setOpen(open === f.id ? null : f.id)}>{open === f.id ? "Done" : "Name it"}</button>
@@ -151,6 +163,15 @@ export default function LibraryPage() {
                   <div className="stack" style={{ gap: 7, marginTop: 8 }}>
                     <label className="field"><span>Title</span><Cell value={f.title || ""} onSave={(v) => patch(f.id, { title: v })} placeholder={f.name} /></label>
                     <label className="field"><span>Tags</span><Cell value={f.tags || ""} onSave={(v) => patch(f.id, { tags: v })} placeholder="bike, studio, festive" /></label>
+                    <label className="field">
+                      <span>Rights</span>
+                      <Cell value={f.rights || ""} onSave={(v) => patch(f.id, { rights: v })} placeholder="Ours, free to publish" />
+                    </label>
+                    <div className="row tight wrap">
+                      {RIGHTS_PRESETS.map((r) => (
+                        <button key={r} className="chip" type="button" onClick={() => patch(f.id, { rights: r })}>{r}</button>
+                      ))}
+                    </div>
                     <label className="check" style={{ fontSize: 13 }}>
                       <input type="checkbox" checked={f.brand === 1} onChange={(e) => patch(f.id, { brand: e.target.checked })} />
                       <span>One of ours</span>

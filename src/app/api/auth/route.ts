@@ -1,6 +1,7 @@
 import { handle, ok, bad, readJson } from "@/lib/http";
 import {
-  COOKIE, anyUsers, createUser, signIn, signOut, userForRequest, listUsers, sweepSessions, type Role,
+  COOKIE, anyUsers, createUser, signIn, signOut, userForRequest, listUsers, sweepSessions,
+  requestRecovery, completeRecovery, type Role,
 } from "@/lib/auth";
 
 export const runtime = "nodejs";
@@ -9,7 +10,7 @@ export const runtime = "nodejs";
 
    Circuit has always run on one Mac for one person, so this is not a sign-up page — there is no
    open registration and never will be. The first account is made once, by whoever is at the
-   machine, and after that only an admin adds people. */
+   machine, and after that only an owner adds people. */
 
 const THIRTY_DAYS = 60 * 60 * 24 * 30;
 
@@ -28,15 +29,34 @@ export const GET = handle(async (req) => {
 });
 
 export const POST = handle(async (req) => {
-  const b = await readJson<{ action?: string; email?: string; password?: string; name?: string; role?: Role }>(req);
+  const b = await readJson<{ action?: string; email?: string; password?: string; name?: string; code?: string; role?: Role }>(req);
 
   if (b.action === "setup") {
-    if (anyUsers()) return bad("Circuit already has accounts — ask an admin to add you", 403);
-    /* The first account is always an admin. Anything else leaves nobody who can sign off. */
-    const user = createUser({ name: b.name || "", email: b.email || "", role: "admin", password: b.password || "" });
+    if (anyUsers()) return bad("Circuit already has accounts — ask the owner to add you", 403);
+    /* The first account is always the owner. Anything else leaves nobody who can sign off, and
+       nobody who can hand out accounts. */
+    const user = createUser({ name: b.name || "", email: b.email || "", role: "owner", password: b.password || "" });
     const { token } = signIn(user.email, b.password || "");
     return new Response(JSON.stringify({ user }), {
       status: 201,
+      headers: { "Content-Type": "application/json", "Set-Cookie": cookie(token, THIRTY_DAYS) },
+    });
+  }
+
+  /* Locked out. Asking for a code says nothing about whether the account exists — the answer is
+     the same either way — because this route is open and anyone who can reach the port could
+     otherwise use it to find out who works here. The code itself only ever appears on this Mac. */
+  if (b.action === "recover") {
+    requestRecovery(b.email || "");
+    return ok({ asked: true, where: "data/recovery-code.txt" });
+  }
+
+  if (b.action === "recover-confirm") {
+    const user = completeRecovery(b.email || "", b.code || "", b.password || "");
+    /* Straight back in, rather than bouncing them to a sign-in form to retype what they just set. */
+    const { token } = signIn(user.email, b.password || "");
+    return new Response(JSON.stringify({ user }), {
+      status: 200,
       headers: { "Content-Type": "application/json", "Set-Cookie": cookie(token, THIRTY_DAYS) },
     });
   }

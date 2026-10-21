@@ -79,8 +79,34 @@ export function extractJson(text: string): unknown {
   return JSON.parse(t.slice(start, end + 1));
 }
 
-/* One read-only ChatGPT run: the prompt goes in on stdin, the final message comes back as JSON. */
-export async function runChatGptJson(prompt: string, opts: { search?: boolean; timeoutMs?: number; images?: string[] } = {}): Promise<unknown> {
+/* A run that ran out of time, as opposed to one that failed. Worth telling apart: a run that
+   hung is worth trying again, and a run that could not sign in is not. */
+class ChatGptTimeout extends Error {
+  readonly timedOut = true;
+  constructor(ms: number) { super(`ChatGPT took longer than ${Math.round(ms / 60000)} minutes`); this.name = "ChatGptTimeout"; }
+}
+const timedOut = (e: unknown): boolean => e instanceof ChatGptTimeout;
+
+/* One read-only ChatGPT run: the prompt goes in on stdin, the final message comes back as JSON.
+
+   A run that overruns is given one more go with half again as long. These calls are a single
+   shot at a model that occasionally stalls on a search, and the old behaviour — fail, mark the
+   job failed, never look at it again — is what left six morning briefings and three learning
+   runs dead in the history with nothing to show for them. Only a timeout is retried: a run
+   that exited because nobody is signed in will exit the same way the second time. */
+export async function runChatGptJson(prompt: string, opts: { search?: boolean; timeoutMs?: number; images?: string[]; retryOnTimeout?: boolean } = {}): Promise<unknown> {
+  const first = opts.timeoutMs ?? 15 * 60 * 1000;
+  try {
+    return await chatGptJsonOnce(prompt, opts, first);
+  } catch (e) {
+    if (!timedOut(e) || opts.retryOnTimeout === false) throw e;
+    const second = Math.round(first * 1.5);
+    console.warn(`[circuit] ChatGPT overran ${Math.round(first / 60000)} minutes — one more attempt at ${Math.round(second / 60000)}.`);
+    return await chatGptJsonOnce(prompt, opts, second);
+  }
+}
+
+async function chatGptJsonOnce(prompt: string, opts: { search?: boolean; images?: string[] }, timeoutMs: number): Promise<unknown> {
   const bin = codexPath();
   if (!bin) throw new Error("Codex isn't installed. Install the ChatGPT desktop app first.");
   const outFile = path.join(os.tmpdir(), `circuit-chatgpt-${process.pid}-${Date.now()}.txt`);
@@ -89,11 +115,10 @@ export async function runChatGptJson(prompt: string, opts: { search?: boolean; t
     "exec", "--skip-git-repo-check", "--ephemeral", "-s", "read-only", "--color", "never",
     "-C", os.tmpdir(), ...(opts.images || []).flatMap((i) => ["-i", i]), "-o", outFile, "-",
   ];
-  const timeoutMs = opts.timeoutMs ?? 15 * 60 * 1000;
   const log: string[] = [];
   await new Promise<void>((resolve, reject) => {
     const child = spawn(bin, args, { stdio: ["pipe", "pipe", "pipe"], env: { ...process.env } });
-    const timer = setTimeout(() => { child.kill("SIGTERM"); reject(new Error(`ChatGPT took longer than ${Math.round(timeoutMs / 60000)} minutes`)); }, timeoutMs);
+    const timer = setTimeout(() => { child.kill("SIGTERM"); reject(new ChatGptTimeout(timeoutMs)); }, timeoutMs);
     const keep = (b: Buffer) => { log.push(b.toString()); if (log.length > 200) log.splice(0, 100); };
     child.stdout.on("data", keep);
     child.stderr.on("data", keep);

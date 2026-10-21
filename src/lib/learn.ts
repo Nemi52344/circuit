@@ -75,10 +75,10 @@ function cut(list: Row[], keyOf: (r: Row) => string | null, labelOf: (k: string)
    deeper pool: 30 posts of real history beats 1 post that happened to be managed here. Pillars
    can't be read off Instagram, but format, day and the posts that beat their own average can. */
 const IG_FORMAT: Record<string, string> = { IMAGE: "Static post", CAROUSEL_ALBUM: "Carousel", REEL: "Reel", VIDEO: "Video" };
-type OwnRow = { permalink: string; type: string; caption: string; posted_at: string; likes: number; comments: number; reach: number | null; saved: number | null; shares: number | null };
+type OwnRow = { permalink: string; type: string; caption: string; posted_at: string; likes: number; comments: number; reach: number | null; saved: number | null; shares: number | null; file_id: string | null; verdict: string | null };
 
 function ownRows(): OwnRow[] {
-  return getDb().prepare("SELECT permalink, type, caption, posted_at, likes, comments, reach, saved, shares FROM own_posts WHERE posted_at <> ''").all() as OwnRow[];
+  return getDb().prepare("SELECT permalink, type, caption, posted_at, likes, comments, reach, saved, shares, file_id, verdict FROM own_posts WHERE posted_at <> ''").all() as OwnRow[];
 }
 const ownEngagement = (r: OwnRow) => r.likes + r.comments + (r.saved || 0) + (r.shares || 0);
 
@@ -172,5 +172,177 @@ export function planHints(): { pillar: string; format: string; weekday: string; 
     format: format?.label || "",
     weekday: weekday?.label || "",
     note: `From your own results${l.from ? ` since ${l.from.slice(0, 10)}` : ""}.`,
+  };
+}
+
+/* ---- the front page's version ---- */
+
+/* The same Instagram history, cut down to what fits in a glance.
+
+   learned() is the full picture and belongs on Analytics. This is the headline: how far the
+   account reached, which post went furthest, and which format is actually earning its place.
+   It reads the same rows, so the two can never disagree. */
+export type TopPost = {
+  permalink: string; type: string; caption: string; posted_at: string;
+  reach: number | null; likes: number; comments: number; saved: number; file_id: string | null;
+  /* How many times the average post's reach this one got. */
+  times: number | null;
+};
+
+/* One month of the account's history. `thin` marks a month with too few posts for its average
+   to mean much — two posts and a lucky one makes a spike that looks like a trend. The chart
+   draws those differently rather than leaving them to be believed. */
+export type IgMonth = {
+  key: string; label: string; posts: number;
+  avg_reach: number; best_reach: number; interactions: number; thin: boolean;
+};
+
+export type IgSummary = {
+  posts: number;
+  reach: number;
+  average_reach: number | null;
+  interactions: number;
+  from: string; to: string;
+  best: TopPost | null;
+  /* Reel against carousel against still, by reach — the one comparison that changes what gets
+     made next week. Only formats with enough posts behind them to mean anything. */
+  formats: { label: string; posts: number; reach: number | null; engagement: number }[];
+  /* Whether the recent half did better than the half before it. Null when there is too little
+     history to halve honestly. */
+  trend: { recent: number; earlier: number; change: number } | null;
+  /* How stale this is. Instagram numbers are only as current as the last sync, and the account
+     itself may simply not have posted — those are different problems and are named separately. */
+  days_since_last_post: number | null;
+  note: string;
+  /* Month by month, oldest first — including months the account posted nothing, because a gap
+     is the most informative thing a posting chart can show and leaving it out would draw a
+     straight line through a silence. */
+  months: IgMonth[];
+  /* Every post as a point, for the dots behind the line. */
+  points: { at: string; reach: number; type: string }[];
+};
+
+export function igSummary(): IgSummary {
+  const own = ownRows();
+  if (!own.length) {
+    return {
+      posts: 0, reach: 0, average_reach: null, interactions: 0, from: "", to: "",
+      best: null, formats: [], trend: null, days_since_last_post: null,
+      note: "No Instagram history yet. Connect Meta in Settings and Circuit reads what the account has already published.",
+      months: [], points: [],
+    };
+  }
+
+  const byDate = [...own].sort((a, b) => (a.posted_at || "").localeCompare(b.posted_at || ""));
+  const reachOf = (r: OwnRow) => (typeof r.reach === "number" ? r.reach : null);
+  const reached = own.map(reachOf).filter((v): v is number => v !== null);
+  const totalReach = reached.reduce((a, b) => a + b, 0);
+  const avgReach = reached.length ? Math.round(totalReach / reached.length) : null;
+  const interactions = own.reduce((a, r) => a + ownEngagement(r), 0);
+
+  /* "Most viewed" means reach where Instagram gave us reach. Falling back to likes when it did
+     not would put two different measurements in the same ranking. */
+  /* A post the owner set aside is still part of what the account did, so it stays in the
+     totals above. It comes out of everything below, because those are advice: a post dropped
+     from the learning should not be the one Circuit holds up as the model. */
+  const counted = own.filter((r) => (r.verdict || "") !== "aside");
+  const setAside = own.length - counted.length;
+
+  const ranked = counted.filter((r) => reachOf(r) !== null).sort((a, b) => (b.reach || 0) - (a.reach || 0));
+  const top = ranked[0] || null;
+  const best: TopPost | null = top
+    ? {
+        permalink: top.permalink,
+        type: IG_FORMAT[top.type] || top.type,
+        caption: (top.caption || "").replace(/\s+/g, " ").trim().slice(0, 150),
+        posted_at: top.posted_at,
+        reach: top.reach,
+        likes: top.likes || 0,
+        comments: top.comments || 0,
+        saved: top.saved || 0,
+        file_id: top.file_id || null,
+        times: avgReach && top.reach ? Math.round((top.reach / avgReach) * 10) / 10 : null,
+      }
+    : null;
+
+  const formats = ownCut(counted, (r) => r.type, (k) => IG_FORMAT[k] || k)
+    .filter((c) => c.enough)
+    .map((c) => ({ label: c.label, posts: c.posts, reach: c.reach, engagement: c.engagement }))
+    .sort((a, b) => (b.reach || 0) - (a.reach || 0));
+
+  /* Halved by position in time, not by a fixed window: the account posts irregularly, and a
+     "last 30 days" that contains two posts says less than nothing. */
+  let trend: IgSummary["trend"] = null;
+  const withReach = byDate.filter((r) => reachOf(r) !== null);
+  if (withReach.length >= 6) {
+    const half = Math.floor(withReach.length / 2);
+    const mean = (rs: OwnRow[]) => Math.round(rs.reduce((a, r) => a + (r.reach || 0), 0) / rs.length);
+    const earlier = mean(withReach.slice(0, half));
+    const recent = mean(withReach.slice(half));
+    trend = { recent, earlier, change: earlier ? Math.round(((recent - earlier) / earlier) * 100) : 0 };
+  }
+
+  const last = byDate[byDate.length - 1]?.posted_at || "";
+  const days = last ? Math.floor((Date.now() - new Date(last).getTime()) / 86400000) : null;
+
+  /* Said rather than left to be worked out from a date. Nine months of silence is the most
+     important thing on this panel, and it would otherwise be the least noticeable. */
+  const asideNote = setAside ? ` ${setAside} post${setAside === 1 ? " is" : "s are"} set aside and left out of the comparisons below.` : "";
+  const note = (days === null
+    ? ""
+    : days > 60
+      ? `Nothing new on the account since ${new Date(last).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })} — ${Math.round(days / 30)} months ago. These are real numbers about old posts.`
+      : days > 14
+        ? `Last post was ${days} days ago.`
+        : "") + asideNote;
+
+  /* Grouped by calendar month, then every month between the first and the last filled in —
+     a month with nothing in it is drawn as a gap, not skipped. */
+  const buckets = new Map<string, OwnRow[]>();
+  for (const r of byDate) {
+    const k = (r.posted_at || "").slice(0, 7);
+    if (k) buckets.set(k, [...(buckets.get(k) || []), r]);
+  }
+  const months: IgMonth[] = [];
+  const keys = [...buckets.keys()].sort();
+  if (keys.length) {
+    const [fy, fm] = keys[0].split("-").map(Number);
+    const [ly, lm] = keys[keys.length - 1].split("-").map(Number);
+    const cur = new Date(Date.UTC(fy, fm - 1, 1));
+    const end = new Date(Date.UTC(ly, lm - 1, 1));
+    while (cur <= end) {
+      const k = `${cur.getUTCFullYear()}-${String(cur.getUTCMonth() + 1).padStart(2, "0")}`;
+      const rs = buckets.get(k) || [];
+      const reaches = rs.map((r) => r.reach).filter((v): v is number => typeof v === "number");
+      months.push({
+        key: k,
+        label: cur.toLocaleDateString("en-GB", { month: "short", year: "2-digit", timeZone: "UTC" }),
+        posts: rs.length,
+        avg_reach: reaches.length ? Math.round(reaches.reduce((a, b) => a + b, 0) / reaches.length) : 0,
+        best_reach: reaches.length ? Math.max(...reaches) : 0,
+        interactions: rs.reduce((a, r) => a + ownEngagement(r), 0),
+        /* Three is the same floor the rest of this module uses before it calls anything a
+           pattern. Below it, an average is one good post wearing a trend's clothes. */
+        thin: rs.length > 0 && rs.length < MIN_ROWS,
+      });
+      cur.setUTCMonth(cur.getUTCMonth() + 1);
+    }
+  }
+
+  const points = byDate
+    .filter((r) => reachOf(r) !== null)
+    .map((r) => ({ at: r.posted_at, reach: r.reach as number, type: IG_FORMAT[r.type] || r.type }));
+
+  return {
+    posts: own.length,
+    reach: totalReach,
+    average_reach: avgReach,
+    interactions,
+    from: byDate[0]?.posted_at || "",
+    to: last,
+    best, formats, trend,
+    days_since_last_post: days,
+    note,
+    months, points,
   };
 }

@@ -2,7 +2,7 @@ import { handle, ok, bad, readJson } from "@/lib/http";
 import { getSetting } from "@/lib/db";
 import { igCompetitorPosts, getMetaToken, type IgAccount } from "@/lib/meta";
 import { getCompetitors, importItems } from "@/lib/sources";
-import { syncCompetitorInstagram, lastIgSync } from "@/lib/igsync";
+import { syncCompetitorInstagram, lastIgSync, backfillCompetitorVideos } from "@/lib/igsync";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -36,6 +36,15 @@ export const POST = handle(async (req) => {
   if (b.action === "sync") {
     try {
       return ok(await syncCompetitorInstagram(Math.min(Math.max(Number(b.days) || 7, 1), 30)));
+    } catch (e) {
+      return bad((e as Error).message);
+    }
+  }
+  /* Fetches the video for reels already saved as a cover frame. Safe to run more than once:
+     it only looks at rows that still have no video. */
+  if (b.action === "backfill-video") {
+    try {
+      return ok(await backfillCompetitorVideos());
     } catch (e) {
       return bad((e as Error).message);
     }

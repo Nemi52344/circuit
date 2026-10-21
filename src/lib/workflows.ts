@@ -25,6 +25,8 @@ export type Workflow = {
 export type RunStep = {
   title: string; kind: StepKind | "branch"; status: "done" | "failed" | "waiting" | "skipped";
   output?: unknown; error?: string; seconds?: number;
+  /* Set on a "you" step: when it stopped for a person, and how long it waited. */
+  waiting_since?: string; waited_minutes?: number;
   /* Which node on the board this was. Titles are what a person reads; this is what the machine
      resumes from, because two nodes may legitimately share a name. */
   node?: string;
@@ -242,6 +244,11 @@ export async function resumeWorkflow(runId: string, input?: Record<string, unkno
   let already: RunStep[] = [];
   try { already = JSON.parse(run.steps || "[]"); } catch { already = []; }
   const stopped = already.find((x) => x.status === "waiting");
+  /* How long it actually sat there, in minutes. Recorded on the step rather than inferred
+     later, because the run's own timestamps cannot tell a long wait from a slow agent. */
+  if (stopped?.waiting_since) {
+    stopped.waited_minutes = Math.max(0, Math.round((Date.now() - new Date(stopped.waiting_since).getTime()) / 60000));
+  }
   if (!stopped?.node) throw new Error("This run was recorded before Circuit kept track of where it stopped, so it has to be run again from the start");
 
   /* The step a person has now done is marked done, and the run goes on from its node. */
@@ -333,14 +340,20 @@ async function drive(
         follow();
         continue;
       }
-      done.push({ node: nodeId, title: step.title, kind: "you", status: "waiting", output: step.note || "" });
+      /* The clock starts here. A run that stops for a person is not finished and not failed —
+         it is waiting, and how long it waits is the single biggest number in any honest
+         account of what this app automates and what it still asks of somebody. */
+      done.push({ node: nodeId, title: step.title, kind: "you", status: "waiting", output: step.note || "", waiting_since: now() });
       last = { ok: true, waiting: true, output: null };
       status = "waiting";
       break;
     }
     if (step.kind === "action" && step.action) {
+      /* Actions were the one kind that finished without saying how long it took, which left a
+         hole in the middle of any attempt to total up where the time goes. */
+      const began = Date.now();
       const r = await runAction(step.action);
-      done.push({ node: nodeId, title: step.title, kind: "action", status: r.ok ? "done" : "failed", output: r.output, error: r.error });
+      done.push({ node: nodeId, title: step.title, kind: "action", status: r.ok ? "done" : "failed", output: r.output, error: r.error, seconds: Math.round((Date.now() - began) / 100) / 10 });
       last = { ok: r.ok, waiting: false, output: r.output };
       if (!r.ok) status = "failed";
     }

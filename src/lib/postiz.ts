@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { getDb, getSetting, setSetting, getFile, UPLOAD_DIR, now } from "@/lib/db";
+import { getDb, getSetting, setSetting, getFile, uploadDir, now } from "@/lib/db";
 
 /* Publishing, through Postiz.
 
@@ -75,7 +75,7 @@ export async function postizStatus(): Promise<PostizStatus> {
 export async function uploadPicture(fileId: string): Promise<{ id: string; path: string }> {
   const f = getFile(fileId);
   if (!f) throw new Error("That picture is missing from the library");
-  const full = path.join(UPLOAD_DIR, f.path);
+  const full = path.join(uploadDir(), f.path);
   if (!fs.existsSync(full)) throw new Error("That picture is missing from disk");
   const form = new FormData();
   form.append("file", new Blob([new Uint8Array(fs.readFileSync(full))], { type: f.mime || "image/jpeg" }), f.name || "picture.jpg");

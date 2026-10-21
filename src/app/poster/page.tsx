@@ -211,6 +211,7 @@ export default function PosterPage() {
             <span className="eyebrow">Facts along the bottom <em className="muted">fact | where it comes from</em></span>
             {s.facts.map((f, i) => (
               <input key={i} className="input" value={f} style={{ marginTop: i ? 6 : 0 }}
+                aria-label={`Fact ${i + 1} along the bottom`}
                 placeholder={["Double cradle frame | High-tensile steel", "Rain, hills, rough road | Rugged to the core", "Built in-house | Designed in India"][i]}
                 onChange={(e) => { const next = [...s.facts]; next[i] = e.target.value; set("facts", next); }} />
             ))}

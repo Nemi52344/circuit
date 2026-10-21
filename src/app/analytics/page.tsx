@@ -7,6 +7,7 @@ import { Pill, Empty, Modal, useToast, statusTone } from "@/components/ui";
 import { WhatWorks } from "@/components/Working";
 import { PosterInsights } from "@/components/Posters";
 import type { Post, Metric } from "@/lib/types";
+import { slug, defaultCampaign } from "@/lib/utm";
 
 const n = (v: number | null | undefined) => (v === null || v === undefined ? "n/a" : v.toLocaleString("en-IN"));
 const sum = (arr: (number | null | undefined)[]) => { const vals = arr.filter((v): v is number => typeof v === "number"); return vals.length ? vals.reduce((a, b) => a + b, 0) : null; };
@@ -45,6 +46,12 @@ function Analytics() {
     return map;
   }, [metrics]);
   const posted = posts.filter((p) => p.status === "posted");
+  /* Every post with somewhere to send people, newest first. Not only the posted ones: the link
+     is needed before the post goes out, which is the whole point of handing it over. */
+  const linked = useMemo(
+    () => posts.filter((p) => p.tagged_link).sort((a, b) => b.scheduled_at.localeCompare(a.scheduled_at)),
+    [posts],
+  );
   const byPlatform = useMemo(() => {
     const groups = new Map<string, { posts: number; withData: number; impressions: (number | null)[]; reach: (number | null)[]; eng: (number | null)[]; clicks: (number | null)[] }>();
     for (const p of posted) {
@@ -107,6 +114,58 @@ function Analytics() {
           );
         }) : <div className="kpi"><small>No posted items yet</small><strong>n/a</strong><span>Mark a post as posted with its URL in the Calendar.</span></div>}
       </div>
+
+      {/* ---- tagged links ---- */}
+      <section className="panel">
+        <div className="panel-head">
+          <h3>Tagged links</h3>
+          <span className="muted small">Every post that sends people to the website, and the link it should carry.</span>
+        </div>
+        {linked.length ? (
+          <>
+            <div className="table-wrap">
+              <table className="data">
+                <thead><tr><th>When</th><th>Platform</th><th>Campaign</th><th className="wrap">The link to use</th><th className="num">Clicks</th><th /></tr></thead>
+                <tbody>
+                  {linked.map((p) => {
+                    const m = latest.get(p.id);
+                    return (
+                      <tr key={p.id}>
+                        <td>{fmtDay(p.scheduled_at)}</td>
+                        <td><Pill tone={statusTone(p.status)}>{p.platform}</Pill></td>
+                        {/* The slug, not what was typed: it is what the analytics will group
+                            on, and showing "Festive Offer 2026!" beside a link that says
+                            festive-offer-2026 invites somebody to search for the wrong one. */}
+                        <td>{slug(p.utm_campaign || "") || <span className="muted">{defaultCampaign(p.scheduled_at)}</span>}
+                          {p.utm_content ? <div className="small muted">{slug(p.utm_content)}</div> : null}</td>
+                        <td className="wrap"><code className="tagged">{p.tagged_link}</code></td>
+                        {/* The click count is whatever was last written down, and nothing writes
+                            it down by itself — see the note under this table. */}
+                        <td className="num">{m && m.clicks !== null && m.clicks !== undefined ? n(m.clicks) : <span className="muted">—</span>}</td>
+                        <td>
+                          <button className="btn small" type="button"
+                            onClick={() => { navigator.clipboard?.writeText(p.tagged_link || ""); push("Link copied", "ok"); }}>Copy</button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {/* Said plainly rather than left for somebody to discover by watching a column stay
+                empty: the tag is only half of this, and Circuit cannot do the other half yet. */}
+            <div className="note small" style={{ marginTop: 12 }}>
+              <strong>Where the clicks come from</strong>
+              The tag is what makes a visit traceable; reading how many there were needs the website&rsquo;s own
+              analytics, and nothing is connected to Circuit. Until something is, put the number in by hand with
+              the rest of a post&rsquo;s metrics — it lands in the Clicks column above.
+            </div>
+          </>
+        ) : (
+          <Empty title="No post links to the website yet"
+            hint="Open a post in the Calendar and put the page it sends people to in “Link to the website”. Circuit tags it so the visit can be traced back here." />
+        )}
+      </section>
 
       <section className="panel">
         <div className="panel-head"><h3>Posted items</h3><Link className="btn small" href="/calendar">Calendar</Link></div>

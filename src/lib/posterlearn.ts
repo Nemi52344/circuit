@@ -29,7 +29,10 @@ function rows(): Row[] {
   const tagged = taggedPosters();
   if (!tagged.length) return [];
   const byId = new Map(tagged.map((t) => [t.own_post_id, t.tags]));
-  const posts = getDb().prepare("SELECT id, ig_id, permalink, file_id, likes, comments, reach, saved, shares FROM own_posts").all() as
+  /* A post somebody has set aside is left out of the learning entirely. Its numbers are still
+     true — it really did get those likes — but it is not a lesson, and leaving it in means the
+     advice keeps pointing at a festival that will not come round again this quarter. */
+  const posts = getDb().prepare("SELECT id, ig_id, permalink, file_id, likes, comments, reach, saved, shares FROM own_posts WHERE COALESCE(verdict, '') != 'aside'").all() as
     { id: string; ig_id: string; permalink: string; file_id: string | null; likes: number; comments: number; reach: number | null; saved: number | null; shares: number | null }[];
   return posts.flatMap((p) => {
     const tags = byId.get(p.id);
@@ -114,4 +117,43 @@ export function posterGuidance(): string {
     return `${win} (${s.times}x)`;
   });
   return `What has worked on this brand's own Instagram, from ${l.tagged} posts: ${points.join(", ")}. Lean this way unless the topic says otherwise.`;
+}
+
+/* ---------- keep or set aside ---------- */
+
+export type Verdict = "keep" | "aside" | "";
+
+/* Records what somebody decided about a published post, and why.
+
+   The reason is not decoration: six months on, "set aside" with no reason is indistinguishable
+   from a mis-click, and the next person reading the wall has no way to judge whether to trust
+   it. Setting one aside therefore asks for a line; keeping one does not, because "this is
+   good" needs no defence. */
+export function setVerdict(ownPostId: string, verdict: Verdict, why = ""): { id: string; verdict: Verdict; why: string } {
+  if (verdict !== "keep" && verdict !== "aside" && verdict !== "") throw new Error("Say keep, aside, or clear it");
+  if (verdict === "aside" && !why.trim()) {
+    throw new Error("Say why it is being set aside — a post dropped from the learning with no reason cannot be judged later");
+  }
+  const db = getDb();
+  const row = db.prepare("SELECT id FROM own_posts WHERE id = ?").get(ownPostId) as { id: string } | undefined;
+  if (!row) throw new Error("That post is not here any more");
+  db.prepare("UPDATE own_posts SET verdict = ?, verdict_why = ?, verdict_at = ? WHERE id = ?")
+    .run(verdict, verdict ? why.trim().slice(0, 300) : "", verdict ? new Date().toISOString() : "", ownPostId);
+  return { id: ownPostId, verdict, why: why.trim() };
+}
+
+export type JudgedPost = {
+  own_post_id: string; ig_id: string; permalink: string; file_id: string | null;
+  engagement: number; reach: number | null; verdict: Verdict; verdict_why: string; caption: string;
+};
+
+/* Every published post with its numbers and whatever has been decided about it, newest first.
+   This is what the wall of past posts reads. */
+export function judged(limit = 60): JudgedPost[] {
+  return getDb().prepare(`
+    SELECT id AS own_post_id, ig_id, permalink, file_id,
+           (likes + comments + COALESCE(saved,0) + COALESCE(shares,0)) AS engagement,
+           reach, COALESCE(verdict,'') AS verdict, COALESCE(verdict_why,'') AS verdict_why,
+           COALESCE(substr(caption, 1, 150), '') AS caption
+    FROM own_posts ORDER BY posted_at DESC LIMIT ?`).all(limit) as JudgedPost[];
 }

@@ -1,8 +1,9 @@
+import { can } from "@/lib/auth";
 import { createHash } from "node:crypto";
-import { getDb, now } from "@/lib/db";
+import { getDb, getAccountsDb, now } from "@/lib/db";
 import type { User } from "@/lib/auth";
 
-/* Sign-off: an admin saying a particular post, as written, may go public.
+/* Sign-off: somebody who can approve saying a particular post, as written, may go public.
 
    The approval is tied to the words, not just the post. A post approved and then edited is not
    an approved post — otherwise sign-off becomes a formality anyone can walk around by getting a
@@ -50,7 +51,7 @@ function derive(r: Row, s: Signoff | undefined): PostState {
   const cleared = Boolean(s && s.decision === "approved" && !stale);
 
   let blocked = "";
-  if (!s) blocked = "Waiting for an admin to sign this off.";
+  if (!s) blocked = "Waiting to be signed off.";
   else if (s.decision === "rejected") blocked = `Sent back by ${s.by_name}${s.note ? `: ${s.note}` : "."}`;
   else if (stale) blocked = "This was signed off, then edited. It needs signing off again.";
 
@@ -82,13 +83,13 @@ function allStates(): PostState[] {
   return rows.map((r) => derive(r, signoffs.get(r.id)));
 }
 
-/* Everything an admin has been asked to look at, plus anything whose approval has gone stale. */
+/* Everything waiting to be looked at, plus anything whose approval has gone stale. */
 export const waitingForSignoff = (): PostState[] => allStates().filter((s) => !s.cleared);
 
 export const signedOff = (): PostState[] => allStates().filter((s) => s.cleared);
 
 export function decide(postId: string, user: User, decision: Decision, note = ""): PostState {
-  if (user.role !== "admin") throw new Error("Only an admin can sign a post off");
+  if (!can(user, "approve")) throw new Error("Your account cannot sign a post off");
   const r = rowFor(postId);
   if (!r) throw new Error("That post is not here any more");
   if (r.status === "posted") throw new Error("That one has already gone out");
@@ -113,11 +114,24 @@ export function decide(postId: string, user: User, decision: Decision, note = ""
    publishing, and the hand-over to Mark alike. There is deliberately no way to publish that
    skips this. */
 export function publishAllowed(postId: string): { ok: boolean; reason: string } {
-  /* Sign-off only means something once somebody can give it. With no admin on the system the
-     gate would refuse every post forever, which is not safety, it is a locked door with the key
-     inside — so an empty user list leaves Circuit behaving as it always has. */
-  const admins = (getDb().prepare("SELECT count(*) AS n FROM users WHERE role = 'admin' AND active = 1").get() as { n: number }).n;
-  if (admins === 0) return { ok: true, reason: "" };
+  /* Sign-off only means something once somebody can give it. With nobody on the system who can
+     approve, the gate would refuse every post forever, which is not safety, it is a locked door
+     with the key inside — so an empty user list leaves Circuit behaving as it always has.
+
+     Asked as a capability, and asked of the accounts database.
+
+     It used to count rows in `users` on the brand database where role = 'admin'. Both halves of
+     that were wrong by the time anybody noticed. Accounts moved to accounts.db when brands were
+     split, and the copy left behind in circuit.db was kept on purpose and never updated again —
+     so this was reading a snapshot of who had an account at some point in the past. Then the
+     roles were renamed and 'admin' stopped existing, which the stale copy hid, because it still
+     said 'admin'. The gate was open or shut according to a table nothing writes to any more.
+
+     Counting what people can do rather than what they are called is also what makes an approver
+     count: they are the role that exists to give exactly this, and a check for 'admin' would
+     have ignored every one of them. */
+  const people = getAccountsDb().prepare("SELECT role FROM users WHERE active = 1").all() as { role: string }[];
+  if (!people.some((u) => can(u, "approve"))) return { ok: true, reason: "" };
 
   const s = stateOf(postId);
   if (!s) return { ok: false, reason: "That post is not here any more" };
