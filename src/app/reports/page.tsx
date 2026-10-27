@@ -17,7 +17,11 @@ import { LineChart, type Point } from "@/components/Chart";
 type Data = {
   months: MonthRow[]; headlines: Headline[];
   ahead: { n: number; first: string | null; last: string | null };
-  admin: { unpaid: number; unpaid_value: number; overdue: number; items: number; stock_value: number; low: number };
+  /* Absent for anyone who does not run the spend — the server leaves it out. */
+  admin: { unpaid: number; unpaid_value: number; overdue: number; items: number; stock_value: number; low: number } | null;
+  /* Whether this account may see revenue, cost and net. When false the server has already
+     zeroed them, and the columns are left off rather than shown as dashes. */
+  can_see_money?: boolean;
   work: { total: number; doing: number; blocked: number; late: number; done_this_month: number };
   social: SocialReport;
   worked: WorkReport;
@@ -97,6 +101,7 @@ export default function ReportsPage() {
             <div className="list-item" style={{ gridTemplateColumns: "1fr auto" }}><div><strong>Finished this month</strong></div><span>{d.work.done_this_month}</span></div>
           </div>
         </section>
+        {d.admin ? (
         <section className="panel stack">
           <div className="panel-head" style={{ marginBottom: 0 }}><h3>Admin</h3><Link className="btn small ghost" href="/admin">Open</Link></div>
           <div className="list">
@@ -105,6 +110,7 @@ export default function ReportsPage() {
             <div className="list-item" style={{ gridTemplateColumns: "1fr auto" }}><div><strong>Stock on hand</strong><p>{d.admin.items} items{d.admin.low ? `, ${d.admin.low} at reorder` : ""}</p></div><span>{moneyShort(d.admin.stock_value)}</span></div>
           </div>
         </section>
+        ) : null}
       </div>
 
       {/* ---- the social media report ---- */}
@@ -278,7 +284,7 @@ export default function ReportsPage() {
                 <th className="num">Planned</th><th className="num">Posted</th><th className="num">Reach</th>
                 <th className="num">Likes</th><th className="num">Comments</th><th className="num">Engagement</th>
                 <th className="num">Briefings</th><th className="num">Work done</th>
-                <th className="num">Revenue</th><th className="num">Cost</th><th className="num">Net</th>
+                {d.can_see_money !== false ? <><th className="num">Revenue</th><th className="num">Cost</th><th className="num">Net</th></> : null}
               </tr></thead>
               <tbody>
                 {rows.map((m, i) => {
@@ -287,7 +293,7 @@ export default function ReportsPage() {
                     <tr key={m.month}>
                       <td className="strong">
                         {monthLabel(m.month)}
-                        {before ? <span className="sub"><Delta now={m.pnl.net} before={before.pnl.net} /> net</span> : null}
+                        {before && d.can_see_money !== false ? <span className="sub"><Delta now={m.pnl.net} before={before.pnl.net} /> net</span> : null}
                       </td>
                       <td className="num muted">{m.posts || "—"}</td>
                       <td className="num">{m.posted || "—"}</td>
@@ -297,9 +303,11 @@ export default function ReportsPage() {
                       <td className="num">{m.engagement ? `${m.engagement}%` : "—"}</td>
                       <td className="num muted">{m.briefings || "—"}</td>
                       <td className="num muted">{m.tasks_done || "—"}</td>
+                      {d.can_see_money !== false ? <>
                       <td className="num">{m.pnl.revenue ? money(m.pnl.revenue) : "—"}</td>
                       <td className="num muted">{m.pnl.costs ? money(m.pnl.costs) : "—"}</td>
                       <td className={`num strong ${m.pnl.net < 0 ? "bad-text" : ""}`}>{m.pnl.revenue || m.pnl.costs ? money(m.pnl.net) : "—"}</td>
+                      </> : null}
                     </tr>
                   );
                 })}

@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { api, postJson, fmtDay } from "@/lib/api";
 import { Pill, Empty, Modal, useToast } from "@/components/ui";
 import { Kpi, Tabs } from "@/components/Sheet";
@@ -26,6 +27,8 @@ export default function ListeningPage() {
   const [tab, setTab] = useState("open");
   const [busy, setBusy] = useState("");
   const [paste, setPaste] = useState<{ platform: string; text: string; post: string } | null>(null);
+  /* Posts on other people's feeds that are worth replying to. Kept on this page because it is
+     the same job — what is being said out there, and what we would say back. */
   const { push, view } = useToast();
 
   const load = useCallback(() => api<Data>("/api/listening").then(setD).catch((e: Error) => push(e.message, "bad")), [push]);
@@ -190,6 +193,20 @@ export default function ListeningPage() {
           </div>
         </Modal>
       ) : null}
+
+      {/* Moved to its own tab. A comment is judged underneath the post it answers, which needs
+          the room a panel on a shared page cannot give it. */}
+      <section className="panel stack">
+        <div className="panel-head">
+          <h3>Commenting on other people&rsquo;s posts</h3>
+          <Link className="btn small" href="/comments">Open Comments</Link>
+        </div>
+        <p className="small muted" style={{ margin: 0 }}>
+          Posts on LinkedIn and X where a comment from you would belong, each with five ways to answer it,
+          now live on their own tab.
+        </p>
+      </section>
+
     </div>
   );
 }

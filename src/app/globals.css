@@ -2260,3 +2260,94 @@ table.data tr.total td { background: rgba(242, 243, 241, .9); border-top-color: 
 .root i { font-style: normal; color: var(--muted); }
 .root.gone { opacity: .6; }
 .root.gone i { color: var(--ink); }
+
+/* What to do about a piece of work, on the row itself. The board exists to be acted on, so the
+   action sits where the eye already is rather than behind a click. */
+.gt-door { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 3px; }
+.gt-door .btn.small { min-height: 26px; padding: 0 10px; font-size: 12px; }
+.gt-door i { font-style: normal; font-size: 11.5px; color: var(--muted); }
+.gt-door i.not-ready { color: var(--ink); }
+
+/* ---- posts worth replying to ---- */
+.conv { display: grid; gap: 7px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); }
+.conv + .conv { border-top: 0; }
+.conv.ignored { opacity: .55; }
+.conv.joined { border-left: 2px solid var(--emerald); }
+.conv-head { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.conv-head strong { font-size: 13.5px; }
+.conv-head .btn { margin-left: auto; }
+.conv p.said { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--text-dim); overflow-wrap: anywhere; }
+.conv-draft { padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--line); display: grid; gap: 6px; }
+.conv-draft p { margin: 0; font-size: 13.5px; line-height: 1.6; overflow-wrap: anywhere; }
+
+/* ---- the comments feed ---- */
+
+/* Posts laid out as they look where they live, because a comment is judged underneath the post
+   it answers and nowhere else. */
+.feed { display: grid; gap: 14px; max-width: 760px; }
+
+.post { background: var(--surface); border: 1px solid var(--line); padding: 16px 18px; display: grid; gap: 10px; }
+/* The one piece of platform colour: enough to tell them apart at a glance, not a costume. */
+.post.li { border-top: 3px solid #0A66C2; }
+.post.x { border-top: 3px solid var(--ink); }
+
+.post > header { display: flex; align-items: center; gap: 11px; }
+.post .av { width: 42px; height: 42px; flex: none; display: grid; place-items: center; border-radius: 50%;
+  background: var(--surface-2); border: 1px solid var(--line); font-size: 13px; font-weight: 600; color: var(--text-dim); }
+.post .who { display: grid; gap: 1px; min-width: 0; }
+.post .who strong { font-size: 14.5px; font-weight: 600; }
+.post .who small { font-size: 11.5px; color: var(--muted); }
+.post > header .btn { margin-left: auto; }
+
+.post .body { margin: 0; font-size: 14.5px; line-height: 1.6; color: var(--ink); overflow-wrap: anywhere; white-space: pre-wrap; }
+.post .meta { display: flex; gap: 6px; flex-wrap: wrap; font-size: 11.5px; }
+
+/* The comment box: indented under the post, the way a reply sits under one. */
+.replies { display: grid; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
+.opt { display: grid; gap: 5px; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--line); }
+.opt.on { border-color: var(--emerald); background: var(--accent-soft); }
+.opt-angle { font-size: 10.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.opt.on .opt-angle { color: var(--accent-text); }
+.opt p { margin: 0; font-size: 13.5px; line-height: 1.6; overflow-wrap: anywhere; }
+.opt .actions { margin-top: 2px; }
+
+@media (max-width: 560px) {
+  .post { padding: 14px; }
+  .post > header .btn { margin-left: 0; }
+  .post > header { flex-wrap: wrap; }
+}
+
+/* The post in the platform's own embed. Fixed height with its own scroll: a long post should
+   not push the comments three screens down, and the embed cannot tell us how tall it is. */
+.post .embed { width: 100%; height: 420px; border: 1px solid var(--line); background: var(--surface-2); display: block; }
+/* A link that is a button, for the small in-line repairs. */
+.linky { border: 0; background: none; padding: 0; font: inherit; font-size: 11.5px; color: var(--accent-text);
+  text-decoration: underline; cursor: pointer; }
+.linky:disabled { opacity: .5; cursor: default; }
+
+@media (max-width: 560px) { .post .embed { height: 360px; } }
+
+/* A post's own picture, linked from the platform's CDN rather than copied. It sits above the
+   embed so the list reads at a glance — a text post and one built round a photograph are
+   different things to comment on. */
+.post .postpic { width: 100%; max-height: 300px; object-fit: cover; border: 1px solid var(--line);
+  background: var(--surface-2); display: block; }
+
+/* Paste a post you found yourself. Sits above the list because on X it is the only way in. */
+.pastebar { display: flex; gap: 8px; align-items: center; }
+.pastebar .input { flex: 1; min-width: 0; }
+
+/* Learning — a test, its marking, and the bank. */
+.quiz { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; counter-reset: q; }
+.quiz > li { border: 1px solid var(--line); background: var(--surface); padding: 16px 18px; display: grid; gap: 8px; counter-increment: q; }
+.quiz > li > strong::before { content: counter(q) ". "; color: var(--muted); font-weight: 500; }
+.quiz > li.right { box-shadow: inset 3px 0 0 var(--accent); }
+.quiz > li.wrong { box-shadow: inset 3px 0 0 var(--ink); }
+.quiz ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.quiz ul li { font-size: 14px; color: var(--text-dim); }
+.quiz ul li.key { color: var(--accent-text); font-weight: 600; }
+.quiz ul li.picked { color: var(--ink); text-decoration: line-through; }
+.quiz label { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--line); cursor: pointer; color: var(--text); }
+.quiz label.on { border-color: var(--accent-line); background: var(--accent-soft); }
+.quiz label input { margin-top: 3px; accent-color: var(--accent); }
+details.panel > summary { cursor: pointer; list-style-position: outside; }

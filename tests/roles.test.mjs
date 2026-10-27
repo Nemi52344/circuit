@@ -32,9 +32,22 @@ test("nobody but the owner hands out accounts", () => {
   for (const { role } of ROLES) assert.equal(can(as(role), "people"), role === "owner", role);
 });
 
+test("salaries, opex and the P&L are the Admin's alone", () => {
+  for (const { role } of ROLES) assert.equal(can(as(role), "finance"), role === "owner", role);
+});
+
+test("a Marketing Manager runs the marketing but not the books or the accounts", () => {
+  for (const what of ["view", "create", "approve", "manage"]) assert.equal(can(as("manager"), what), true, what);
+  for (const what of ["finance", "people"]) assert.equal(can(as("manager"), what), false, what);
+});
+
+test("a Marketing Executive makes work and cannot run, sign off or see the books", () => {
+  for (const what of ["approve", "manage", "finance", "people"]) assert.equal(can(as("creator"), what), false, what);
+});
+
 test("a viewer changes nothing", () => {
   assert.deepEqual(grantsOf("viewer"), ["view"]);
-  for (const what of ["create", "approve", "manage", "people"]) assert.equal(can(as("viewer"), what), false, what);
+  for (const what of ["create", "approve", "manage", "finance", "people"]) assert.equal(can(as("viewer"), what), false, what);
 });
 
 test("every role can read, or it could not use the app at all", () => {
@@ -66,7 +79,7 @@ test("anything unrecognised is allowed nothing beyond reading", () => {
 
 test("no user at all is allowed nothing", () => {
   for (const nobody of [null, undefined, {}, { role: 7 }, { role: null }]) {
-    for (const what of ["view", "create", "approve", "manage", "people"]) {
+    for (const what of ["view", "create", "approve", "manage", "finance", "people"]) {
       assert.equal(can(nobody, what), false, `${JSON.stringify(nobody)} ${what}`);
     }
   }

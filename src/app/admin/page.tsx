@@ -5,6 +5,7 @@ import { Pill, Empty, useToast } from "@/components/ui";
 import { Kpi, Tabs, Cell, MoneyCell } from "@/components/Sheet";
 import { money, moneyShort } from "@/lib/money";
 import type { Bill, StockItem } from "@/lib/books";
+import type { Outlook } from "@/lib/stockmath";
 import type { Statement, Charge } from "@/lib/statement";
 
 /* Admin: what we owe and what we hold.
@@ -13,7 +14,7 @@ import type { Statement, Charge } from "@/lib/statement";
    a number nobody typed is a number nobody can stand behind. */
 
 type Data = {
-  bills: Bill[]; stock: StockItem[];
+  bills: Bill[]; stock: (StockItem & { outlook: Outlook })[];
   summary: { bills: number; unpaid: number; unpaid_value: number; overdue: number; this_month: number; items: number; stock_value: number; low: number; never_counted: number };
   statuses: string[]; categories: string[];
 };
@@ -240,19 +241,21 @@ export default function AdminPage() {
       ) : (
         <section className="panel stack">
           <p className="small muted" style={{ margin: 0 }}>
-            Changing a quantity counts as a count, so the date looks after itself. Set a reorder level and anything at or below it is flagged.
+            Enter each item once — how many there are, the reorder level and how many get used a month. From then on Circuit works out what is left,
+            the day to reorder, and puts the reorder on the Work board by itself. Typing a new quantity counts as a count and resets the estimate.
           </p>
           {d.stock.length ? (
             <div className="table-wrap">
               <table className="data">
                 <thead><tr>
                   <th>Item</th><th>SKU</th><th>Where</th>
-                  <th className="num">Qty</th><th>Unit</th><th className="num">Reorder at</th>
-                  <th className="num">Unit cost</th><th className="num">Value</th><th>Counted</th><th />
+                  <th className="num">Counted</th><th>Unit</th><th className="num">Uses a month</th><th className="num">Left now</th><th className="num">Reorder at</th><th>Reorder by</th>
+                  <th className="num">Unit cost</th><th className="num">Value</th><th>Counted on</th><th />
                 </tr></thead>
                 <tbody>
                   {d.stock.map((it) => {
-                    const low = it.reorder_at > 0 && it.qty <= it.reorder_at;
+                    const o = it.outlook;
+                    const low = o.low;
                     return (
                       <tr key={it.id}>
                         <td style={{ minWidth: 160 }}>
@@ -263,16 +266,19 @@ export default function AdminPage() {
                         <td style={{ minWidth: 110 }}><Cell value={it.location} onSave={(v) => patch({ what: "stock", id: it.id, location: v })} placeholder="—" /></td>
                         <td className="num"><Cell value={it.qty} onSave={(v) => patch({ what: "stock", id: it.id, qty: Number(v) || 0 })} type="number" align="num" /></td>
                         <td style={{ width: 90 }}><Cell value={it.unit} onSave={(v) => patch({ what: "stock", id: it.id, unit: v })} /></td>
+                        <td className="num"><Cell value={it.per_month || 0} onSave={(v) => patch({ what: "stock", id: it.id, per_month: Number(v) || 0 })} type="number" align="num" /></td>
+                        <td className={`num strong ${low ? "bad-text" : ""}`}>{it.per_month ? `~${o.left}` : it.qty}</td>
                         <td className="num"><Cell value={it.reorder_at} onSave={(v) => patch({ what: "stock", id: it.id, reorder_at: Number(v) || 0 })} type="number" align="num" /></td>
+                        <td className="small">{o.reorder_by ? <span className={low ? "bad-text" : ""}>{o.reorder_by}</span> : <span className="muted">—</span>}</td>
                         <td className="num"><MoneyCell paise={it.unit_cost} onSave={(v) => patch({ what: "stock", id: it.id, unit_cost: Math.round(Number(v || 0) * 100) })} /></td>
-                        <td className="num strong">{money(Math.round(it.qty * it.unit_cost))}</td>
-                        <td className="small muted">{it.counted_at || "never"}</td>
+                        <td className="num strong">{money(Math.round(o.left * it.unit_cost))}</td>
+                        <td className={`small ${o.stale ? "bad-text" : "muted"}`}>{it.counted_at || "never"}</td>
                         <td className="act"><button className="btn small ghost" type="button" onClick={() => drop("stock", it.id, it.item)}>×</button></td>
                       </tr>
                     );
                   })}
                   <tr className="total">
-                    <td colSpan={7}>{d.stock.length} item{d.stock.length === 1 ? "" : "s"}{s.low ? ` · ${s.low} at reorder` : ""}</td>
+                    <td colSpan={10}>{d.stock.length} item{d.stock.length === 1 ? "" : "s"}{s.low ? ` · ${s.low} at reorder` : ""}</td>
                     <td className="num">{money(s.stock_value)}</td>
                     <td colSpan={2} />
                   </tr>

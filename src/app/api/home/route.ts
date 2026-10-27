@@ -1,4 +1,5 @@
-import { handle, ok } from "@/lib/http";
+import { handleUser, ok } from "@/lib/http";
+import { can } from "@/lib/roles";
 import { getDb } from "@/lib/db";
 import { listTasks, pnlMonth } from "@/lib/books";
 import { thisMonth } from "@/lib/money";
@@ -13,7 +14,7 @@ export const runtime = "nodejs";
    is slow for no reason, and the point of this one is to say what state the place
    is in — how much is moving, how much is waiting on you — not to replace
    Reports. Everything here is counted, never estimated. */
-export const GET = handle(async () => {
+export const GET = handleUser(async (_req, user) => {
   const db = getDb();
   const today = new Date().toISOString().slice(0, 10);
   const tasks = listTasks();
@@ -33,7 +34,9 @@ export const GET = handle(async () => {
       doing: tasks.filter((t) => t.status === "doing").length,
       late: tasks.filter((t) => t.status !== "done" && t.end_date && t.end_date < today).length,
     },
-    month: pnlMonth(thisMonth()),
+    /* Net for the month is salaries and opex underneath, so it shows only to the Admin.
+       Everyone else gets nothing rather than a zero, which would read as "we made nothing". */
+    month: can(user, "finance") ? pnlMonth(thisMonth()) : null,
     /* How the account is actually doing, read from its own Instagram history. */
     ig: igSummary(),
     last_intel: lastIntel(),

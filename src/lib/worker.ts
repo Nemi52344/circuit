@@ -316,6 +316,13 @@ async function brandPass(brandName: string) {
       }
     }
 
+    // the work board follows the calendar and closes what is resolved, once an hour per brand
+    if (Date.now() - (boardSynced.get(brandName) || 0) > 3600000) {
+      boardSynced.set(brandName, Date.now());
+      const { syncWork } = await import("@/lib/workplan");
+      try { syncWork(); } catch { /* the next pass tries again */ }
+    }
+
     // routines that are due: the morning check, the weekly review, anything the owner scheduled
     seedWorkflows();
     for (const wf of dueWorkflows()) {
@@ -352,11 +359,18 @@ async function brandPass(brandName: string) {
   }
 }
 
+const boardSynced = new Map<string, number>();
+
 export function kickWorker() {
+  if (process.env.CIRCUIT_WORKER === "0") return;
   setTimeout(() => { tick().catch(() => null); }, 500);
 }
 
 export function startWorker() {
+  /* CIRCUIT_WORKER=0 keeps a copy of Circuit from doing anything on its own — no routines, no
+     emails, no ChatGPT runs. A test copy started with it on the real database would otherwise
+     send the real morning briefing to the real people. */
+  if (process.env.CIRCUIT_WORKER === "0") return;
   if (state.timer) return;
   state.timer = setInterval(() => { tick().catch(() => null); }, 20000);
   kickWorker();

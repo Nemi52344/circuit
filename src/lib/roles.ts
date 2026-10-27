@@ -13,11 +13,16 @@ export type Can =
   | "view"      // read what is here
   | "create"    // make, upload, edit, schedule
   | "approve"   // sign off work, so it may go out
-  | "manage"    // settings, connections, routines, the brand itself
+  | "manage"    // settings, connections, routines, bills, the brand itself
+  | "finance"   // salaries, opex, the P&L
   | "people";   // accounts and roles
 
+/* Money is its own permission rather than part of "manage". The whiteboard that set out the
+   nineteen workstreams boxed manpower, opex and the P&L together and wrote "only for Gowtham"
+   beside them: a manager runs the marketing and approves its spend on tools and bills, but
+   what each person is paid is not theirs to read. */
 const GRANTS: Record<Role, Can[]> = {
-  owner: ["view", "create", "approve", "manage", "people"],
+  owner: ["view", "create", "approve", "manage", "finance", "people"],
   manager: ["view", "create", "approve", "manage"],
   /* Creator and approver are disjoint on purpose. Publishing cannot be undone — Instagram's
      API has no delete — so the person who made a thing must not also be the only person who
@@ -27,10 +32,12 @@ const GRANTS: Record<Role, Can[]> = {
   viewer: ["view"],
 };
 
+/* Named for the people who actually hold them. The keys stay as they were so no stored account
+   changes; only what the screen calls each one does. */
 export const ROLES: { role: Role; label: string; what: string }[] = [
-  { role: "owner", label: "Owner", what: "Everything, including who else gets an account" },
-  { role: "manager", label: "Manager", what: "Everything except handing out accounts" },
-  { role: "creator", label: "Creator", what: "Makes and schedules the work — cannot sign it off" },
+  { role: "owner", label: "Admin", what: "Everything — including salaries, the P&L and who gets an account" },
+  { role: "manager", label: "Marketing Manager", what: "Runs the marketing and signs work off — no salaries or P&L, no accounts" },
+  { role: "creator", label: "Marketing Executive", what: "Makes and schedules the work, and takes the learning tests — cannot sign off" },
   { role: "approver", label: "Approver", what: "Signs work off — cannot make or upload any of it" },
   { role: "viewer", label: "Viewer", what: "Reads everything, changes nothing" },
 ];

@@ -4,7 +4,7 @@ import { api, postJson } from "@/lib/api";
 import { Empty, useToast } from "@/components/ui";
 import { Kpi, Tabs, Cell, MoneyCell, Delta } from "@/components/Sheet";
 import { money, moneyShort, monthLabel } from "@/lib/money";
-import type { Person, Opex, MarketingMonth } from "@/lib/books";
+import type { Person, Opex, MarketingMonth, AiMonth } from "@/lib/books";
 import type { PnlMonth } from "@/lib/books";
 
 /* Finance: what the month costs to run, and what it left behind.
@@ -17,7 +17,7 @@ import type { PnlMonth } from "@/lib/books";
    per month in a way no list can work out. */
 
 type Data = {
-  people: Person[]; opex: Opex[]; pnl: PnlMonth[]; marketing: MarketingMonth[];
+  people: Person[]; opex: Opex[]; pnl: PnlMonth[]; marketing: MarketingMonth[]; ai: AiMonth[];
   summary: { month: PnlMonth; previous: PnlMonth; headcount: number; payroll: number; contract: number; opex_lines: number };
   categories: string[];
 };
@@ -91,7 +91,7 @@ export default function FinancePage() {
           { key: "cost", label: "What marketing costs", count: d.marketing.filter((m) => m.total).length },
           { key: "pnl", label: "P&L month on month", count: d.pnl.filter((p) => p.revenue || p.costs).length },
           { key: "people", label: "Manpower", count: d.people.length },
-          { key: "opex", label: "Opex", count: d.opex.length },
+          { key: "opex", label: "Opex", count: d.opex.length + (d.ai[0]?.tools.length || 0) },
         ]}
         active={tab} onPick={setTab}
       />
@@ -148,8 +148,8 @@ export default function FinancePage() {
             <span className="small muted">Latest first · <Delta now={cur.net} before={prev.net} /> on the month before</span>
           </div>
           <p className="small muted" style={{ margin: 0 }}>
-            Type revenue and cost of sales. Manpower and opex are added up from the lists, so they cannot fall out of step.
-            Bills are shown beside the result and never inside it — a bill for rent and a rent line in opex are the same rupee.
+            Type revenue and cost of sales. Manpower comes from the team list and opex from the standing costs plus every AI bill,
+            so none of it is typed twice. Other bills are shown beside the result and never inside it — a bill for rent and a rent line in opex are the same rupee.
           </p>
           <div className="table-wrap">
             <table className="data">
@@ -230,9 +230,34 @@ export default function FinancePage() {
       ) : null}
 
       {tab === "opex" ? (
+        <>
+        {/* The AI bill, counted from the bills themselves — nobody types it. */}
         <section className="panel stack">
           <div className="panel-head" style={{ marginBottom: 0 }}>
-            <h3>Opex</h3>
+            <h3>AI and automation tools</h3>
+            <span className="muted small">Filled in every month from the bills — Claude, ChatGPT, Grok, Higgsfield, Zapier and the rest</span>
+          </div>
+          {d.ai.some((m) => m.total) ? (
+            <div className="table-wrap">
+              <table className="data">
+                <thead><tr><th>Month</th><th>Tools</th><th className="num">AI cost</th></tr></thead>
+                <tbody>
+                  {d.ai.filter((m, i) => m.total || i === 0).map((m) => (
+                    <tr key={m.month}>
+                      <td>{monthLabel(m.month)}</td>
+                      <td className="small">{m.tools.length ? m.tools.map((t) => `${t.vendor} ${money(t.amount)}`).join(" · ") : <span className="muted">No AI bills dated this month yet — they arrive when the card statement is read</span>}</td>
+                      <td className="num">{money(m.total)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : <Empty title="No AI bills yet" hint="Add them in Admin, or read a card statement — they land here on their own." />}
+          <p className="small muted" style={{ margin: 0 }}>A bill counts here if its category is &ldquo;ai&rdquo; or its vendor is a known AI or automation tool. Do not also add these below as standing costs — they would be counted twice.</p>
+        </section>
+        <section className="panel stack">
+          <div className="panel-head" style={{ marginBottom: 0 }}>
+            <h3>Other standing costs</h3>
             <span className="actions"><button className="btn small primary" type="button" disabled={busy} onClick={addOpex}>Add cost</button></span>
           </div>
           <p className="small muted" style={{ margin: 0 }}>Standing monthly costs — rent, software, insurance. One-off spend belongs in Admin as a bill.</p>
@@ -254,14 +279,15 @@ export default function FinancePage() {
                   ))}
                   <tr className="total">
                     <td colSpan={3}>{d.opex.length} line{d.opex.length === 1 ? "" : "s"}</td>
-                    <td className="num">{money(cur.opex)}<span className="sub">running this month</span></td>
+                    <td className="num">{money(cur.opex - (cur.ai || 0))}<span className="sub">running this month</span></td>
                     <td colSpan={3} />
                   </tr>
                 </tbody>
               </table>
             </div>
-          ) : <Empty title="No standing costs yet" hint="Rent, software, insurance — anything that repeats every month." />}
+          ) : <Empty title="No other standing costs" hint="Rent, insurance — anything else that repeats every month." />}
         </section>
+        </>
       ) : null}
     </div>
   );

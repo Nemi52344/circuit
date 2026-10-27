@@ -1,5 +1,6 @@
 import { getDb, getSetting } from "@/lib/db";
-import { listTasks, saveTask, type Task } from "@/lib/books";
+import { listTasks, saveTask, type Task, type StockItem } from "@/lib/books";
+import { stockOutlook } from "@/lib/stockmath";
 
 /* Filling the board from what is already happening.
 
@@ -75,6 +76,29 @@ export function suggestWork(): Suggested[] {
     });
   }
 
+  /* Stock. Each item's details are entered once; after that what is left is worked out from
+     how many get used a month, and the reorder is raised as work the day it falls due — not
+     when somebody notices the shelf is empty. A count over a month old raises a count. */
+  const stock = db.prepare("SELECT * FROM stock").all() as StockItem[];
+  for (const it of stock) {
+    const o = stockOutlook(it);
+    if (!o.low) continue;
+    out.push({
+      title: `Reorder ${it.item}`,
+      notes: `About ${o.left} ${it.unit} left against a reorder level of ${it.reorder_at}${o.runs_out ? `; runs out around ${o.runs_out}` : ""}. Enter the new quantity in Admin → Stock when it arrives.`,
+      owner: "", area: "admin", start_date: today(), end_date: o.runs_out && o.runs_out > today() ? o.runs_out : plus(7),
+      status: "planned", progress: 0, depends_on: null, why: `${it.item} at or below reorder`,
+    });
+  }
+  if (stock.some((it) => stockOutlook(it).stale)) {
+    out.push({
+      title: "Count the stock",
+      notes: "At least one item has not been counted for over a month, so what is left is an estimate on an estimate. Put the real numbers in Admin → Stock.",
+      owner: "", area: "admin", start_date: today(), end_date: plus(7),
+      status: "planned", progress: 0, depends_on: null, why: "a stock count over a month old",
+    });
+  }
+
   /* Work Circuit proposed on its own code and nobody has picked up. */
   const proposed = db.prepare("SELECT title, why, effort FROM roadmap WHERE status = 'proposed' ORDER BY created_at").all() as
     { title: string; why: string; effort: string }[];
@@ -137,4 +161,27 @@ export function fillWork(): { added: Task[]; updated: Task[]; skipped: string[] 
     }));
   }
   return { added, updated, skipped };
+}
+
+/* The board, kept up to date without anybody pressing anything.
+
+   Three things move on their own. A month's content bar follows the calendar (fillWork, run
+   here rather than waiting for the button). A one-off job Circuit raised because something was
+   missing — no approvers, one product photo, no Postiz key — closes itself when that thing is
+   no longer missing, since the condition that made it a job is gone. And new work Circuit can
+   trace to a record is added as it appears. What a person decided is still left alone: a task
+   somebody marked blocked, and anything they wrote themselves. */
+const RAISED_BY_CIRCUIT = ["Set up who signs off posts", "Photograph more of the bikes", "Connect Postiz so posts publish themselves"];
+
+export function syncWork(): { added: number; updated: number; closed: number } {
+  const filled = fillWork();
+  const still = new Set(suggestWork().map((s) => s.title));
+  let closed = 0;
+  for (const t of listTasks()) {
+    const raised = RAISED_BY_CIRCUIT.includes(t.title) || t.title === "Count the stock" || t.title.startsWith("Reorder ");
+    if (!raised || still.has(t.title) || t.status === "done" || t.status === "blocked") continue;
+    saveTask({ id: t.id, status: "done", progress: 100 });
+    closed += 1;
+  }
+  return { added: filled.added.length, updated: filled.updated.length, closed };
 }

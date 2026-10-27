@@ -313,6 +313,132 @@ export const MIGRATIONS: Migration[] = [
       addColumn(db, "series", "file_id", "TEXT");
     },
   },
+  {
+    id: 16,
+    name: "a piece of work knows what Circuit can do about it",
+    up: (db) => {
+      /* A task used to be a row you looked at: a title, two dates and a percentage, pointing at
+         nothing. Circuit already had the better idea in `slots`, which carry what stage the work
+         is at and what is needed next, and the board was a second task system that duplicated
+         the idea and did none of the work.
+
+         `door` names what Circuit can do about this piece of work — draft it, fill it, go and
+         read something — or which screen does it when the answer is a person. Blank on a task
+         somebody typed themselves, which honestly has no door until they say otherwise. */
+      addColumn(db, "tasks", "door", "TEXT NOT NULL DEFAULT ''");
+    },
+  },
+  {
+    id: 17,
+    name: "conversations worth joining on LinkedIn and X",
+    up: (db) => {
+      /* The other half of listening. `comments` holds what people said on our posts; this holds
+         other people's posts that are worth replying to — somebody asking about range anxiety,
+         a fleet operator weighing electric, a competitor's launch thread.
+
+         The link is the point. Circuit cannot read LinkedIn or X directly — both block
+         everything that is not a browser, and automating either is against their terms and
+         against this project's own rules — so it finds them through search, keeps the link, and
+         drafts what we would say. A person opens the link and posts it. Nothing is ever sent
+         from here.
+
+         `reachable` records what happened when Circuit tried the link: a search can return a URL
+         that does not exist, and a list of ten plausible dead links is worse than an empty one. */
+      db.exec(`CREATE TABLE IF NOT EXISTS conversations (
+        id TEXT PRIMARY KEY,
+        platform TEXT NOT NULL,
+        url TEXT NOT NULL,
+        author TEXT NOT NULL DEFAULT '',
+        said TEXT NOT NULL DEFAULT '',
+        topic TEXT NOT NULL DEFAULT '',
+        why TEXT NOT NULL DEFAULT '',
+        reachable TEXT NOT NULL DEFAULT 'unchecked',
+        draft TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'new',
+        found_at TEXT NOT NULL,
+        drafted_at TEXT,
+        updated_at TEXT NOT NULL
+      )`);
+      /* One row per link: the same post found by two searches is one conversation. */
+      db.exec("CREATE UNIQUE INDEX IF NOT EXISTS conversations_url ON conversations (url)");
+      db.exec("CREATE INDEX IF NOT EXISTS conversations_state ON conversations (status, found_at)");
+    },
+  },
+  {
+    id: 18,
+    name: "five ways to answer a post, not one",
+    up: (db) => {
+      /* One draft meant taking it or asking for another, and the second attempt was usually the
+         first one reworded. Five written at once, each from a different angle — a practical
+         answer, a number, a question back, agreement that adds something, a polite disagreement
+         — give a real choice, and picking between them takes seconds where judging a single
+         draft in isolation takes minutes.
+
+         `chosen` is the index of the one that was used, or -1. Kept rather than only copying the
+         text into `draft`, so it is possible to see later which kind of comment actually gets
+         replies. */
+      addColumn(db, "conversations", "options", "TEXT NOT NULL DEFAULT '[]'");
+      addColumn(db, "conversations", "chosen", "INTEGER NOT NULL DEFAULT -1");
+      /* Written as the brand or as a person. A company page comment reaches a fraction of what
+         a person's does on LinkedIn, so which one this was written for changes the words. */
+      addColumn(db, "conversations", "voice", "TEXT NOT NULL DEFAULT 'brand'");
+    },
+  },
+  {
+    id: 19,
+    name: "the post itself, not a summary of it",
+    up: (db) => {
+      /* The comments were written from Circuit's own two-sentence précis of a post, which is why
+         they came out generic: a paraphrase keeps the subject and loses every specific, and the
+         specifics are the only thing a comment can usefully answer.
+
+         Both platforms publish an embed for exactly this purpose — LinkedIn at
+         /embed/feed/update/urn:li:activity:ID and X through publish.twitter.com/oembed — and
+         both hand over the full text to a plain request. That is their sanctioned route, not a
+         way round the wall, and it also turns the link check into a real one: a post whose text
+         comes back exists, which a status code from LinkedIn could never establish. */
+      addColumn(db, "conversations", "full_text", "TEXT NOT NULL DEFAULT ''");
+      addColumn(db, "conversations", "embed", "TEXT NOT NULL DEFAULT ''");
+    },
+  },
+  {
+    id: 20,
+    name: "a post's picture, where it has one",
+    up: (db) => {
+      /* The embed shows a post's image by itself, but the card around it could not: a text post
+         and a post built around a photograph looked identical in the list, and which it is
+         changes both whether it is worth commenting on and what the comment should say.
+
+         The URL is kept, not the file. These are other people's pictures on their own CDN —
+         downloading them would be making a copy of somebody's work for no reason, and the
+         rights line on it would be a lie. */
+      addColumn(db, "conversations", "image", "TEXT NOT NULL DEFAULT ''");
+    },
+  },
+  /* 21: the Learning tests. The bank holds questions and their key; an attempt fixes which
+     questions a test asked when it starts, so the key is only read when it is handed in. */
+  {
+    id: 21,
+    name: "learning questions and test attempts",
+    up: (db) => {
+      db.exec(`CREATE TABLE IF NOT EXISTS learning_questions (
+        id TEXT PRIMARY KEY, kind TEXT NOT NULL, topic TEXT NOT NULL DEFAULT '', question TEXT NOT NULL,
+        options TEXT NOT NULL, answer INTEGER NOT NULL, why TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'draft', created_at TEXT NOT NULL)`);
+      db.exec(`CREATE TABLE IF NOT EXISTS learning_attempts (
+        id TEXT PRIMARY KEY, user_id TEXT NOT NULL, user_name TEXT NOT NULL DEFAULT '', kind TEXT NOT NULL,
+        question_ids TEXT NOT NULL, orders TEXT NOT NULL DEFAULT '[]', answers TEXT, score INTEGER, total INTEGER NOT NULL DEFAULT 0,
+        started_at TEXT NOT NULL, finished_at TEXT)`);
+      db.exec("CREATE INDEX IF NOT EXISTS learning_attempts_user ON learning_attempts (user_id, finished_at)");
+    },
+  },
+  /* 22: how many of a stock item get used in a month, so what is left can be worked out
+     between counts rather than only known on the day somebody counts. */
+  {
+    id: 22,
+    name: "stock usage per month",
+    up: (db) => addColumn(db, "stock", "per_month", "REAL NOT NULL DEFAULT 0"),
+  },
 ];
 
 export type Applied = { id: number; name: string; at: string };

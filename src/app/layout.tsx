@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import Nav from "@/components/Nav";
 import Topbar from "@/components/Topbar";
-import { Gate } from "@/components/Gate";
+import { Gate, Allowed } from "@/components/Gate";
 
 export const metadata: Metadata = {
   title: "Circuit",
@@ -28,7 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <div className="main">
             <Topbar />
             <main className="workspace">
-              <div className="workspace-inner">{children}</div>
+              <div className="workspace-inner"><Allowed>{children}</Allowed></div>
               <footer className="foot">
                 <span>Circuit · BNC Motors, a division of Nemi</span>
                 <span>Saved on this Mac</span>

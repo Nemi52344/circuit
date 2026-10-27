@@ -116,8 +116,9 @@ const DENIED: Record<Can, string> = {
   view: "You do not have access to that",
   create: "Your account can approve work but not make it — ask a creator",
   approve: "Your account cannot sign work off — ask an approver",
-  manage: "Only an owner or a manager can change that",
-  people: "Only an owner can change who has an account",
+  manage: "Only an Admin or a Marketing Manager can change that",
+  finance: "Salaries, opex and the P&L are for the Admin only",
+  people: "Only an Admin can change who has an account",
 };
 
 export function handleCan(what: Can, fn: (req: Request, user: User, ctx: { params: Promise<Record<string, string>> }) => Promise<Response>) {

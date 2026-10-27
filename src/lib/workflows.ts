@@ -33,7 +33,7 @@ export type RunStep = {
 };
 export type Run = { id: string; workflow_id: string; status: string; steps: string; started_at: string; finished_at: string | null };
 
-export type ActionKey = "read_competitors" | "pull_our_numbers" | "look_at_posters" | "ask_for_ideas" | "back_up" | "take_briefing" | "daily_intel" | "email_intel" | "read_comments" | "draft_replies" | "check_website" | "posts_due";
+export type ActionKey = "read_competitors" | "pull_our_numbers" | "look_at_posters" | "ask_for_ideas" | "back_up" | "take_briefing" | "daily_intel" | "get_briefing" | "email_intel" | "read_comments" | "draft_replies" | "check_website" | "posts_due";
 
 export const ACTIONS: { key: ActionKey; label: string; note: string }[] = [
   { key: "read_competitors", label: "Read competitors' Instagram", note: "Saves anything new from the last 7 days" },
@@ -47,10 +47,13 @@ export const ACTIONS: { key: ActionKey; label: string; note: string }[] = [
   { key: "draft_replies", label: "Draft replies to new comments", note: "In our voice — they wait for you to send them" },
   { key: "take_briefing", label: "Take the briefing from the folder", note: "Picks up the PDF Claude made and files it" },
   { key: "daily_intel", label: "Sweep the daily intel here instead", note: "Circuit does the sweep itself — only if Claude hasn't" },
+  { key: "get_briefing", label: "Get this morning's briefing", note: "Takes Claude's PDF from the folder, or does the sweep itself when there is none" },
   { key: "email_intel", label: "Email this morning's intel", note: "Sends the latest briefing through your Zapier hook" },
 ];
 
-async function runAction(key: ActionKey): Promise<{ ok: boolean; output: unknown; error: string }> {
+/* Exported so the work board can run the same thing a routine runs. One implementation of
+   "read the competitors" rather than two that drift. */
+export async function runAction(key: ActionKey): Promise<{ ok: boolean; output: unknown; error: string }> {
   try {
     switch (key) {
       case "read_competitors": {
@@ -114,6 +117,21 @@ async function runAction(key: ActionKey): Promise<{ ok: boolean; output: unknown
         const r = await takeFromFolder();
         if (!r.taken.length) return { ok: !r.errors.length, output: { taken: 0 }, error: r.errors[0] || "" };
         return { ok: !r.errors.length, output: { taken: r.taken.length, dates: r.taken.map((t) => t.date), link: r.taken[0].url }, error: r.errors[0] || "" };
+      }
+      case "get_briefing": {
+        /* The daily intel never waits on a person. If Claude has left a briefing in the folder
+           it is taken; if not, Circuit sweeps the ten verticals itself. Waiting for somebody to
+           drop a PDF in is what held this routine from 8 October onward. */
+        const { takeFromFolder } = await import("@/lib/intelinbox");
+        const taken = await takeFromFolder();
+        if (taken.taken.length) return { ok: true, output: { from: "Claude's folder", taken: taken.taken.length, link: taken.taken[0].url }, error: "" };
+        const { sweepBriefing } = await import("@/lib/intelrun");
+        const r = await sweepBriefing();
+        return {
+          ok: true,
+          output: { from: "Circuit's own sweep", items: r.run.items.length, theme: r.run.theme, pdf: r.pdf?.name || "", link: r.pdf_url || "" },
+          error: r.pdf_error,
+        };
       }
       case "daily_intel": {
         /* The whole sweep, PDF included. This used to call runIntel() alone, which left the
@@ -439,19 +457,28 @@ export function closeSupersededRuns(): number {
   return closed + orphans;
 }
 
-/* The daily intel routine used to do the sweep itself. Claude does it better and does it
-   anyway, so the routine's job is now to collect that PDF and send it. Anyone already running
-   the old version gets moved across once, quietly, without losing the workflow's history. */
+/* The daily intel goes out every morning without anybody being asked.
+
+   It used to wait: take the PDF Claude left in the folder, and if there was none, stop and ask
+   a person to drop one in. On 8 October nobody did, and because a waiting run holds the next
+   one, there was no briefing for two weeks. Now one step takes Claude's PDF when it is there and
+   does the sweep itself when it is not, then emails it. Any run still waiting from the old
+   version is closed so it stops holding the schedule. */
 function upgradeIntelRoutine() {
   const db = getDb();
   const row = db.prepare("SELECT id, steps FROM workflows WHERE name = 'Nemi daily intel' AND builtin = 1").get() as { id: string; steps: string } | undefined;
-  if (!row || !row.steps.includes('"daily_intel"')) return;
+  if (!row || row.steps.includes('"get_briefing"')) return;
   const steps: Step[] = [
-    { kind: "action", title: "Take the briefing from the folder", action: "take_briefing" },
+    { kind: "action", title: "Get this morning's briefing", action: "get_briefing" },
     { kind: "action", title: "Email it", action: "email_intel" },
   ];
   db.prepare("UPDATE workflows SET steps = ?, at_time = '09:30', purpose = ?, updated_at = ? WHERE id = ?")
-    .run(JSON.stringify(steps), "Takes the briefing Claude made this morning, files it and emails it out", now(), row.id);
+    .run(JSON.stringify(steps), "Gets this morning's briefing — Claude's, or its own sweep — and emails it out. Never waits on anyone.", now(), row.id);
+  const waiting = db.prepare("SELECT id, steps FROM workflow_runs WHERE workflow_id = ? AND status = 'waiting'").all(row.id) as { id: string; steps: string }[];
+  for (const r of waiting) {
+    const st = (JSON.parse(r.steps || "[]") as RunStep[]).map((x) => x.status === "waiting" ? { ...x, status: "skipped" as const, error: "The routine no longer waits on a person." } : x);
+    db.prepare("UPDATE workflow_runs SET status = 'failed', steps = ?, finished_at = ? WHERE id = ?").run(JSON.stringify(st), now(), r.id);
+  }
 }
 
 /* The routines Circuit ships with, wired to the agents it ships with. */
@@ -497,10 +524,10 @@ export function seedWorkflows() {
     },
     {
       name: "Nemi daily intel",
-      purpose: "Takes the briefing Claude made this morning, files it and emails it out",
+      purpose: "Gets this morning's briefing — Claude's, or its own sweep — and emails it out. Never waits on anyone.",
       trigger: "daily", at_time: "09:30",
       steps: [
-        { kind: "action", title: "Take the briefing from the folder", action: "take_briefing" },
+        { kind: "action", title: "Get this morning's briefing", action: "get_briefing" },
         { kind: "action", title: "Email it", action: "email_intel" },
       ],
     },

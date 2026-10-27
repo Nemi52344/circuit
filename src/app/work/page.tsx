@@ -4,6 +4,9 @@ import { api, postJson } from "@/lib/api";
 import { Pill, Empty, useToast, statusTone } from "@/components/ui";
 import { Kpi, Tabs, Cell } from "@/components/Sheet";
 import type { Task } from "@/lib/books";
+import Link from "next/link";
+
+type DoorState = { key: string; kind: "run" | "open" | "yours"; label: string; what: string; href?: string; ready: boolean; line: string };
 
 /* What everyone is working on, as a chart rather than a list.
 
@@ -37,10 +40,12 @@ export default function WorkPage() {
   const [open, setOpen] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [size, setSize] = useState(0);
+  const [doors, setDoors] = useState<Record<string, DoorState>>({});
+  const [running, setRunning] = useState<string | null>(null);
   const { push, view } = useToast();
 
-  const load = useCallback(() => api<{ tasks: Task[]; statuses: string[]; areas: string[]; programme_size: number }>("/api/work")
-    .then((d) => { setTasks(d.tasks); setStatuses(d.statuses); setAreas(d.areas); setSize(d.programme_size || 0); })
+  const load = useCallback(() => api<{ tasks: Task[]; statuses: string[]; areas: string[]; programme_size: number; doors: Record<string, DoorState> }>("/api/work")
+    .then((d) => { setTasks(d.tasks); setStatuses(d.statuses); setAreas(d.areas); setSize(d.programme_size || 0); setDoors(d.doors || {}); })
     .catch((e: Error) => push(e.message, "bad")), [push]);
   useEffect(() => { load(); }, [load]);
 
@@ -84,7 +89,7 @@ export default function WorkPage() {
      value is the gaps: a board built from what is happening cannot show you that nobody has
      made a spec sheet, because not making one leaves no record to read. */
   const programme = async () => {
-    if (!confirm(`Put the standard list of marketing work on the board — ${size || "about fifty"} things to make, across showroom print, outdoor and dealer, social, digital, the sales kit, events and identity?\n\nIt is a list to cut down, not a report. Anything already on the board with the same name is left alone.`)) return;
+    if (!confirm(`Put ${size || "the"} pieces of marketing work on the board — the ones Circuit can actually help with?\n\nEach comes with something to press: either Circuit does it, or it opens the screen that does. Anything already on the board with the same name is left alone.`)) return;
     setBusy(true);
     try {
       const r = await postJson<{ added: number; skipped: number }>("/api/work", { action: "programme" });
@@ -93,6 +98,17 @@ export default function WorkPage() {
         : "All of it is already on the board", r.added ? "ok" : "");
       load();
     } catch (e) { push((e as Error).message, "bad"); } finally { setBusy(false); }
+  };
+
+  /* Pressing a task's door. The work happens here rather than somewhere else that then has to
+     be navigated to and found. */
+  const press = async (t: Task) => {
+    setRunning(t.id);
+    try {
+      const r = await postJson<{ made: string; detail: string; href?: string }>("/api/work", { action: "do", id: t.id });
+      push(`${r.made} — ${r.detail}`, "ok");
+      load();
+    } catch (e) { push((e as Error).message, "bad"); } finally { setRunning(null); }
   };
 
   const drop = async (t: Task) => {
@@ -154,8 +170,9 @@ export default function WorkPage() {
           <h2>Work</h2>
           <p className="lede">
             Everything on the go, as a chart — what overlaps, what is late, what nobody has started yet.
-            “Fill from what's happening” reads your own data; “Add the standard list” lays out everything marketing
-            puts out — brochures, standees, hoardings, reels, dealer kits — so the gaps show up too.
+            Every piece of work here either has something Circuit can run now, or opens the screen where it is
+            done with what Circuit already holds. Anything it cannot help with says so rather than sitting there
+            as a row to tick.
           </p>
         </div>
         <span className="actions">
@@ -166,7 +183,7 @@ export default function WorkPage() {
             {busy ? "Working…" : "Fill from what's happening"}
           </button>
           <button className="btn" type="button" disabled={busy} onClick={programme}
-            title="Brochures, standees, hoardings, reels, dealer kits — everything marketing puts out. A list to cut down, not a report.">
+            title="The marketing work Circuit can help with — each one with something to press">
             Add the standard list
           </button>
           <button className="btn primary" type="button" disabled={busy} onClick={add}>Add work</button>
@@ -194,9 +211,29 @@ export default function WorkPage() {
           </div>
           {shown.map((t) => (
             <div className="gantt-row" key={t.id}>
-              <div className="gt-name" onClick={() => setOpen(open === t.id ? null : t.id)}>
-                <strong>{t.title}</strong>
-                <small>{t.owner || "unassigned"} · {t.status}</small>
+              <div className="gt-name">
+                <strong onClick={() => setOpen(open === t.id ? null : t.id)} style={{ cursor: "pointer" }}>{t.title}</strong>
+                {/* What to do about it, rather than only what it is called. A piece of work with
+                    no door says so, which is more use than an empty status dropdown. */}
+                {(() => {
+                  const d = t.door ? doors[t.door] : undefined;
+                  if (!d) return <small>{t.owner || "unassigned"} · {t.status}</small>;
+                  return (
+                    <span className="gt-door">
+                      {d.kind === "run" ? (
+                        <button className="btn small primary" type="button"
+                          disabled={!d.ready || running === t.id || t.status === "done"}
+                          title={d.ready ? d.what : d.line}
+                          onClick={() => press(t)}>
+                          {running === t.id ? "Working…" : d.label}
+                        </button>
+                      ) : d.href ? (
+                        <Link className="btn small" href={d.href} title={d.what}>{d.label}</Link>
+                      ) : null}
+                      <i className={d.ready ? "" : "not-ready"}>{d.line}</i>
+                    </span>
+                  );
+                })()}
               </div>
               <div className="gt-track">
                 {todayPct >= 0 && todayPct <= 1 ? <div className="gt-today" style={{ left: `${todayPct * 100}%` }} /> : null}
@@ -244,6 +281,33 @@ export default function WorkPage() {
                 </select>
               </label>
             </div>
+            {(() => {
+              const d = t.door ? doors[t.door] : undefined;
+              if (!d) {
+                return (
+                  <div className="note small">
+                    <strong>Circuit has nothing it can run for this one.</strong>
+                    It is yours — the board is keeping track of it, nothing more.
+                  </div>
+                );
+              }
+              return (
+                <div className="note stack" style={{ gap: 8 }}>
+                  <div>
+                    <strong className="small">{d.kind === "run" ? "Circuit can do this" : "Where this is done"}</strong>
+                    <div className="small muted">{d.what}</div>
+                  </div>
+                  <div className="small">{d.ready ? d.line : <span className="bad-text">{d.line}</span>}</div>
+                  <div className="actions">
+                    {d.kind === "run"
+                      ? <button className="btn small primary" type="button" disabled={!d.ready || running === t.id} onClick={() => press(t)}>
+                          {running === t.id ? "Working…" : d.label}
+                        </button>
+                      : d.href ? <Link className="btn small primary" href={d.href}>{d.label}</Link> : null}
+                  </div>
+                </div>
+              );
+            })()}
             <label className="field"><span>Notes</span>
               <Cell value={t.notes} onSave={(v) => save({ id: t.id, notes: v })} placeholder="anything worth remembering" />
             </label>

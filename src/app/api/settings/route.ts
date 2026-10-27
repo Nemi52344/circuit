@@ -1,8 +1,10 @@
 import { getSetting, setSetting, getDb } from "@/lib/db";
 import { getBrand, DEFAULT_BRAND } from "@/lib/brand";
-import { handle, ok, bad, readJson } from "@/lib/http";
+import { handle, handleCan, ok, bad, readJson } from "@/lib/http";
 import { tokenInfo } from "@/lib/meta";
 
+/* Reading stays open to anyone signed in: it returns only masked hints, and the studio, the
+   drafts and the slot pages need to know whether a key exists. Changing a key does not. */
 export const runtime = "nodejs";
 
 export const GET = handle(async () => {
@@ -27,7 +29,7 @@ export const GET = handle(async () => {
   });
 });
 
-export const POST = handle(async (req) => {
+export const POST = handleCan("manage", async (req) => {
   const b = await readJson<{ gemini_key?: string | null; meta_token?: string | null; hf_key_id?: string | null; hf_key_secret?: string | null; ig_user_id?: string | null; brand?: Record<string, string> }>(req);
   if (b.gemini_key !== undefined) {
     const k = (b.gemini_key || "").trim();

@@ -1,4 +1,5 @@
 import { getDb, newId, now } from "@/lib/db";
+import { stockOutlook } from "@/lib/stockmath";
 import { activeIn, monthsBack, thisMonth } from "@/lib/money";
 
 /* The books: what the company owes, holds, pays and earns.
@@ -19,6 +20,8 @@ export type Task = {
      a board that refuses work without an estimate is a board people stop using, and a task
      written before these existed has neither. */
   estimate_minutes?: number; spent_minutes?: number;
+  /* What Circuit can do about this piece of work — see lib/doors.ts. */
+  door?: string;
   /* Whether a person has to do this or the app could. Blank until somebody says — guessing
      would turn the automation figure into a fiction. */
   doable_by?: string;
@@ -35,7 +38,7 @@ export type Bill = {
 export type StockItem = {
   id: string; item: string; sku: string; category: string; qty: number; unit: string;
   location: string; reorder_at: number; unit_cost: number; counted_at: string; notes: string;
-  created_at: string; updated_at: string;
+  per_month: number; created_at: string; updated_at: string;
 };
 export type Person = {
   id: string; name: string; role: string; department: string; monthly_cost: number;
@@ -50,7 +53,7 @@ export type PnlRow = { month: string; revenue: number; cogs: number; other_in: n
 export const TASK_STATUS = ["planned", "doing", "blocked", "done"] as const;
 export const TASK_AREAS = ["marketing", "product", "plant", "sales", "admin", "finance"] as const;
 export const BILL_STATUS = ["unpaid", "paid", "disputed"] as const;
-export const BILL_CATEGORIES = ["materials", "services", "marketing", "rent", "utilities", "logistics", "travel", "equipment", "other"] as const;
+export const BILL_CATEGORIES = ["ai", "materials", "services", "marketing", "rent", "utilities", "logistics", "travel", "equipment", "other"] as const;
 export const OPEX_CATEGORIES = ["rent", "utilities", "software", "marketing", "logistics", "insurance", "professional", "maintenance", "other"] as const;
 
 /* ---- the work board ---- */
@@ -63,7 +66,7 @@ export function saveTask(t: Partial<Task> & { title?: string }): Task {
   const at = now();
   if (t.id) {
     const fields = ["title", "notes", "owner", "area", "start_date", "end_date", "status", "progress", "depends_on",
-                    "estimate_minutes", "spent_minutes", "doable_by"] as const;
+                    "estimate_minutes", "spent_minutes", "doable_by", "door"] as const;
     const sets: string[] = [];
     const vals: unknown[] = [];
     for (const f of fields) if (t[f] !== undefined) { sets.push(`${f} = ?`); vals.push(t[f]); }
@@ -75,11 +78,11 @@ export function saveTask(t: Partial<Task> & { title?: string }): Task {
   const id = newId();
   const start = t.start_date || at.slice(0, 10);
   db.prepare(`INSERT INTO tasks (id, title, notes, owner, area, start_date, end_date, status, progress, depends_on,
-                                 estimate_minutes, spent_minutes, doable_by, created_at, updated_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+                                 estimate_minutes, spent_minutes, doable_by, door, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(id, t.title || "Untitled", t.notes || "", t.owner || "", t.area || "marketing",
       start, t.end_date || start, t.status || "planned", t.progress ?? 0, t.depends_on || null,
-      t.estimate_minutes ?? 0, t.spent_minutes ?? 0, t.doable_by || "", at, at);
+      t.estimate_minutes ?? 0, t.spent_minutes ?? 0, t.doable_by || "", t.door || "", at, at);
   return db.prepare("SELECT * FROM tasks WHERE id = ?").get(id) as Task;
 }
 
@@ -114,7 +117,7 @@ export function saveStock(s: Partial<StockItem>): StockItem {
   const db = getDb();
   const at = now();
   if (s.id) {
-    const fields = ["item", "sku", "category", "qty", "unit", "location", "reorder_at", "unit_cost", "counted_at", "notes"] as const;
+    const fields = ["item", "sku", "category", "qty", "unit", "location", "reorder_at", "unit_cost", "counted_at", "notes", "per_month"] as const;
     const sets: string[] = [];
     const vals: unknown[] = [];
     for (const f of fields) if (s[f] !== undefined) { sets.push(`${f} = ?`); vals.push(s[f]); }
@@ -124,10 +127,10 @@ export function saveStock(s: Partial<StockItem>): StockItem {
     return db.prepare("SELECT * FROM stock WHERE id = ?").get(s.id) as StockItem;
   }
   const id = newId();
-  db.prepare(`INSERT INTO stock (id, item, sku, category, qty, unit, location, reorder_at, unit_cost, counted_at, notes, created_at, updated_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+  db.prepare(`INSERT INTO stock (id, item, sku, category, qty, unit, location, reorder_at, unit_cost, counted_at, notes, per_month, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(id, s.item || "", s.sku || "", s.category || "other", s.qty || 0, s.unit || "nos", s.location || "",
-      s.reorder_at || 0, s.unit_cost || 0, s.counted_at || at.slice(0, 10), s.notes || "", at, at);
+      s.reorder_at || 0, s.unit_cost || 0, s.counted_at || at.slice(0, 10), s.notes || "", s.per_month || 0, at, at);
   return db.prepare("SELECT * FROM stock WHERE id = ?").get(id) as StockItem;
 }
 
@@ -182,11 +185,35 @@ export function remove(table: "tasks" | "bills" | "stock" | "people" | "opex", i
   return { deleted: true };
 }
 
+/* ---- AI tools: opex that fills itself in ----
+
+   For this team opex is, in practice, the AI and automation bill: Claude, ChatGPT, Grok,
+   Higgsfield, Magnific, Zapier and the rest, every month. Each of those already arrives in Circuit as a bill — typed, or read
+   off the card statement — so asking somebody to type it again as an opex line is how the two
+   drift apart. A bill counts as an AI tool if its category says "ai" or its vendor is one we
+   recognise; the list is a regular expression so adding a new tool is one word. */
+const AI_VENDORS = /\b(claude|anthropic|openai|chatgpt|gpt|grok|xai|x\.ai|gemini|perplexity|midjourney|runway|elevenlabs|eleven ?labs|higgsfield|magnific|meshy|vizcom|kling|pika|suno|krea|leonardo|ideogram|heygen|synthesia|luma|freepik|cursor|copilot|jasper|descript|topaz|stability|zapier|make\.com|n8n)/i;
+export const isAiBill = (b: Pick<Bill, "vendor" | "category">) => b.category === "ai" || AI_VENDORS.test(b.vendor || "");
+
+export type AiMonth = { month: string; total: number; tools: { vendor: string; amount: number; bills: number }[] };
+export function aiTools(month: string, bills: Bill[] = listBills()): AiMonth {
+  const by = new Map<string, { vendor: string; amount: number; bills: number }>();
+  for (const b of bills) {
+    if (b.bill_date.slice(0, 7) !== month || !isAiBill(b) || !(b.amount + b.tax)) continue;
+    const key = b.vendor.trim().toLowerCase();
+    const t = by.get(key) || { vendor: b.vendor.trim(), amount: 0, bills: 0 };
+    t.amount += b.amount + b.tax; t.bills += 1;
+    by.set(key, t);
+  }
+  const tools = [...by.values()].sort((a, b) => b.amount - a.amount);
+  return { month, total: tools.reduce((a, t) => a + t.amount, 0), tools };
+}
+
 /* ---- the month's profit and loss ---- */
 
 export type PnlMonth = {
   month: string; revenue: number; cogs: number; gross: number;
-  manpower: number; opex: number; other_in: number; other_out: number;
+  manpower: number; opex: number; ai: number; other_in: number; other_out: number;
   costs: number; net: number; margin: number | null;
   bills: number; bills_unpaid: number; notes: string;
 };
@@ -212,7 +239,9 @@ export function savePnl(row: { month: string } & Partial<PnlRow>): PnlRow {
 /* One month, built from the standing lines rather than retyped.
 
    Bills are reported beside the result, not inside it. A bill for rent and a rent line in opex
-   are the same rupee, and counting both would quietly double the month's costs. */
+   are the same rupee, and counting both would quietly double the month's costs. AI tools are
+   the one exception: they are counted from their bills and only from their bills, so they must
+   never also be typed as an opex line. */
 export function pnlMonth(month: string, ctx?: { people: Person[]; opex: Opex[]; rows: Map<string, PnlRow>; bills: Bill[] }): PnlMonth {
   const db = getDb();
   const people = ctx?.people ?? listPeople();
@@ -221,7 +250,8 @@ export function pnlMonth(month: string, ctx?: { people: Person[]; opex: Opex[]; 
   const bills = ctx?.bills ?? listBills();
 
   const manpower = people.filter((p) => activeIn(month, p.started_on, p.ended_on)).reduce((a, p) => a + p.monthly_cost, 0);
-  const opexTotal = ops.filter((o) => activeIn(month, o.starts_on, o.ends_on)).reduce((a, o) => a + o.monthly_cost, 0);
+  const ai = aiTools(month, bills).total;
+  const opexTotal = ops.filter((o) => activeIn(month, o.starts_on, o.ends_on)).reduce((a, o) => a + o.monthly_cost, 0) + ai;
   const inMonth = bills.filter((b) => b.bill_date.slice(0, 7) === month);
 
   const revenue = row?.revenue || 0;
@@ -233,7 +263,7 @@ export function pnlMonth(month: string, ctx?: { people: Person[]; opex: Opex[]; 
   const net = gross + otherIn - costs;
 
   return {
-    month, revenue, cogs, gross, manpower, opex: opexTotal,
+    month, revenue, cogs, gross, manpower, opex: opexTotal, ai,
     other_in: otherIn, other_out: otherOut, costs, net,
     margin: revenue ? Math.round((net / revenue) * 1000) / 10 : null,
     bills: inMonth.reduce((a, b) => a + b.amount + b.tax, 0),
@@ -267,8 +297,8 @@ export function adminSummary() {
     overdue: unpaid.filter((b) => b.due_date && b.due_date < today).length,
     this_month: bills.filter((b) => b.bill_date.slice(0, 7) === thisMonth()).reduce((a, b) => a + b.amount + b.tax, 0),
     items: stock.length,
-    stock_value: stock.reduce((a, s) => a + Math.round(s.qty * s.unit_cost), 0),
-    low: stock.filter((s) => s.reorder_at > 0 && s.qty <= s.reorder_at).length,
+    stock_value: stock.reduce((a, s) => a + Math.round(stockOutlook(s).left * s.unit_cost), 0),
+    low: stock.filter((s) => stockOutlook(s).low).length,
     never_counted: stock.filter((s) => !s.counted_at).length,
   };
 }

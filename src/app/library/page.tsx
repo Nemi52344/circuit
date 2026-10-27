@@ -16,6 +16,7 @@ import type { FileRow } from "@/lib/types";
 const KINDS = [
   { key: "all", label: "Everything" },
   { key: "brand", label: "Ours" },
+  { key: "raw", label: "Raw collateral" },
   { key: "video", label: "Video" },
   { key: "product", label: "Products" },
   { key: "generated", label: "Creations" },
@@ -178,7 +179,7 @@ export default function LibraryPage() {
                     </label>
                     <div className="actions">
                       <button className="btn small danger" type="button" onClick={() => remove(f)}>Delete</button>
-                      {f.kind !== "upload" ? <span className="muted small">also used by {f.kind === "product" ? "Studio" : f.kind === "inspiration" ? "Inspiration" : "the Wall"}</span> : null}
+                      {f.kind !== "upload" && f.kind !== "raw" ? <span className="muted small">also used by {f.kind === "product" ? "Studio" : f.kind === "inspiration" ? "Inspiration" : "the Wall"}</span> : null}
                     </div>
                   </div>
                 ) : null}

@@ -1,7 +1,9 @@
 "use client";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { api, postJson } from "@/lib/api";
-import { can, type Role, type Can } from "@/lib/roles";
+import { usePathname } from "next/navigation";
+import { can, ROLES, type Role, type Can } from "@/lib/roles";
+import { activeNav } from "@/lib/nav";
 
 /* The door. Nothing in Circuit renders until somebody is behind it.
 
@@ -180,5 +182,25 @@ export function SignOutButton() {
       onClick={async () => { await postJson("/api/auth", { action: "out" }); refresh(); }}>
       Sign out
     </button>
+  );
+}
+
+/* A page somebody's role does not reach, opened by typing its address or following an old link.
+   The nav already hides it; this says why, instead of a page of failed requests. */
+export function Allowed({ children }: { children: React.ReactNode }) {
+  const { me } = useMe();
+  const needs = activeNav(usePathname() || "")?.needs;
+  if (!needs || can(me, needs)) return <>{children}</>;
+  const label = ROLES.find((r) => r.role === me?.role)?.label || "your role";
+  return (
+    <div className="card" style={{ maxWidth: 560 }}>
+      <h2 style={{ marginTop: 0 }}>Not part of the {label} login</h2>
+      <p className="muted">
+        {needs === "finance" ? "Salaries, opex and the P&L are kept to the Admin." :
+         needs === "people" ? "Only the Admin decides who has an account." :
+         needs === "approve" ? "Signing work off is done by a Marketing Manager or the Admin." :
+         "This is run by a Marketing Manager or the Admin."}
+      </p>
+    </div>
   );
 }

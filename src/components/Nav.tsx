@@ -3,6 +3,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { NAV, activeNav } from "@/lib/nav";
+import { useMe } from "@/components/Gate";
+import { can } from "@/lib/roles";
 
 /* One glyph per place, and no two the same.
 
@@ -43,6 +45,12 @@ const ICONS: Record<string, React.ReactNode> = {
   rupee: <><path d="M4.5 2h7M4.5 5.5h7M10.5 2c0 2.2-1.6 3.5-4 3.5h-2l6 9" /></>,
   /* hammer — What to build. */
   hammer: <><path d="M9.5 2.5l4 4-2 2-4-4z" /><path d="M7.5 4.5L2 10v4h4l5.5-5.5" /></>,
+  /* speech — Comments: a reply under somebody else's post. */
+  /* camera — Image database: the raw shots. */
+  camera: <><path d="M1.5 5h3l1.2-2h4.6l1.2 2h3v8h-13z" /><circle cx="8" cy="8.8" r="2.4" /></>,
+  /* cap — Learning: a mortarboard. */
+  cap: <><path d="M1 6l7-3.5L15 6 8 9.5z" /><path d="M4 7.6V11c0 1 1.8 2 4 2s4-1 4-2V7.6" /><path d="M15 6v4" /></>,
+  speech: <><path d="M14 9.5a2 2 0 0 1-2 2H5.5L2.5 14V4a2 2 0 0 1 2-2H12a2 2 0 0 1 2 2z" /><path d="M5.5 5.5h5M5.5 8h3" /></>,
   /* people — People. */
   people: <><circle cx="6" cy="5" r="2.5" /><path d="M1.5 14c0-2.5 2-4 4.5-4s4.5 1.5 4.5 4" /><path d="M11 3.2a2.5 2.5 0 0 1 0 4.6M12 10.4c1.6.5 2.5 1.8 2.5 3.6" /></>,
 };
@@ -57,6 +65,7 @@ function Icon({ name }: { name: string }) {
 
 export default function Nav() {
   const path = usePathname();
+  const { me } = useMe();
   const nav = useRef<HTMLElement>(null);
 
   /* On a phone the rail is one horizontal strip holding nineteen links, so the page you are on
@@ -80,7 +89,8 @@ export default function Nav() {
   // approvers opening a review link see the post only, not the workspace
   if (path?.startsWith("/review/")) return null;
   const active = activeNav(path);
-  const groups = Array.from(new Set(NAV.map((i) => i.group)));
+  const mine = NAV.filter((it) => !it.needs || can(me, it.needs));
+  const groups = Array.from(new Set(mine.map((i) => i.group)));
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -94,7 +104,7 @@ export default function Nav() {
         {groups.map((g) => (
           <div key={g} style={{ display: "contents" }}>
             <div className="nav-section">{g}</div>
-            {NAV.filter((it) => it.group === g).map((it) => (
+            {mine.filter((it) => it.group === g).map((it) => (
               <Link key={it.href} href={it.href} className={active?.href === it.href ? "active" : ""} aria-current={active?.href === it.href ? "page" : undefined}>
                 <Icon name={it.icon} />
                 {it.label}

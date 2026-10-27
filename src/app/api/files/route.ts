@@ -28,6 +28,7 @@ export const POST = handle(async (req) => {
   const kind = str(form.get("kind"), "upload");
   const tags = str(form.get("tags"), "");
   const brand = str(form.get("brand"), "") === "1" ? 1 : 0;
+  const rights = str(form.get("rights"), "").slice(0, 300);
   const files = form.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
   if (!files.length) return bad("No files received");
   const db = getDb();
@@ -40,11 +41,11 @@ export const POST = handle(async (req) => {
     const seen = findByHash(hashBuffer(buf));
     if (seen) { already.push(f.name); saved.push({ ...seen, tags: seen.tags || "", brand: seen.brand ?? 0, title: seen.title || "" }); continue; }
     const row = saveFileBuffer(buf, f.name, f.type || "application/octet-stream", kind);
-    if (tags || brand) {
+    if (tags || brand || rights) {
       /* The name a camera gives a file is not a title, so the only sensible default is the name
          with its extension taken off — better than nothing, and easy to correct. */
-      db.prepare("UPDATE files SET tags = ?, brand = ?, title = ? WHERE id = ?")
-        .run(tags, brand, f.name.replace(/\.[^.]+$/, ""), row.id);
+      db.prepare("UPDATE files SET tags = ?, brand = ?, title = ?, rights = ? WHERE id = ?")
+        .run(tags, brand, f.name.replace(/\.[^.]+$/, ""), rights, row.id);
     }
     saved.push({ ...row, tags, brand, title: "" });
   }

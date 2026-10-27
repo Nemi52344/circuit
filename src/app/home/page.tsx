@@ -39,7 +39,8 @@ type Data = {
   planned: number; ahead: number; posted: number; assets: number; known: number;
   briefings: number; competitors: number;
   work: { open: number; doing: number; late: number };
-  month: { revenue: number; costs: number; net: number };
+  /* Null for anyone without the Finance permission — the server leaves it out. */
+  month: { revenue: number; costs: number; net: number } | null;
   last_intel: { at: string; date: string; items: number } | null;
   ig?: Ig;
 };
@@ -92,8 +93,10 @@ export default function HomePage() {
         <div><strong>{n(d?.briefings)}</strong><small>briefings archived</small></div>
         <div><strong>{n(d?.known)}</strong><small>things learned</small></div>
         <div>
-          <strong>{d ? (d.month.revenue || d.month.costs ? moneyShort(d.month.net) : "—") : "—"}</strong>
-          <small>{d && !d.month.revenue && !d.month.costs ? "no books this month yet" : "net this month"}</small>
+          {/* The Admin sees the month's net; everyone else sees how many posts have gone out,
+              which is the number this slot is worth to them. */}
+          <strong>{d?.month ? (d.month.revenue || d.month.costs ? moneyShort(d.month.net) : "—") : n(d?.posted)}</strong>
+          <small>{!d?.month ? "posts gone out" : !d.month.revenue && !d.month.costs ? "no books this month yet" : "net this month"}</small>
         </div>
       </section>
 
