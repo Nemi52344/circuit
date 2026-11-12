@@ -1,0 +1,17 @@
+# Cloudflare Tunnel for Circuit. Copy to ~/.cloudflared/config.yml once the tunnel exists:
+#   cloudflared tunnel login                     (opens the browser; pick the domain)
+#   cloudflared tunnel create circuit            (prints the tunnel id, writes its credentials file)
+#   cloudflared tunnel route dns circuit circuit.example.com
+#   cloudflared service install                  (starts it with the Mac, keeps it running)
+#
+# Circuit itself should run as the production build when it is reachable from outside —
+# `npm run serve` — not `npm run dev`. Nothing on this Mac is opened to the internet: the tunnel
+# dials out to Cloudflare, and Cloudflare forwards visitors down it.
+
+tunnel: circuit
+credentials-file: /Users/prashanth/.cloudflared/TUNNEL-ID.json
+
+ingress:
+  - hostname: circuit.example.com
+    service: http://localhost:3210
+  - service: http_status:404

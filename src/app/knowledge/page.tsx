@@ -51,7 +51,7 @@ export default function KnowledgePage() {
       {view}
       <div className="page-head">
         <div>
-          <h2>What Circuit knows</h2>
+          <h1>What Circuit knows</h1>
           <p className="lede">
             Everything the agents have found out about this market, each with its source. The topic ideas,
             the research and the captions all read from here, so the app gets better the longer it runs.
@@ -97,7 +97,7 @@ export default function KnowledgePage() {
       )}
 
       <p className="small muted">
-        Agents file here on their own every morning. See or change the routine in <Link href="/workflows" style={{ textDecoration: "underline" }}>Workflows</Link>.
+        Agents file here on their own every morning. See or change the routine in <Link href="/automation?tab=workflows" style={{ textDecoration: "underline" }}>Workflows</Link>.
         Nothing is stored without a source link, and the same fact found twice is counted, not duplicated.
       </p>
     </div>

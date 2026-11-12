@@ -1,17 +1,17 @@
-import { handle, ok, bad, readJson, str } from "@/lib/http";
+import { handleCan, ok, bad, readJson, str } from "@/lib/http";
 import { saveFileBuffer } from "@/lib/db";
 import { readStatement, listStatements, chargesFor, saveCharge, removeStatement, needsReceipts, type Charge } from "@/lib/statement";
 
 export const runtime = "nodejs";
 export const maxDuration = 800;
 
-export const GET = handle(async (req) => {
+export const GET = handleCan("manage", async (req) => {
   const id = new URL(req.url).searchParams.get("id");
   if (id) return ok({ charges: chargesFor(id) });
   return ok({ statements: listStatements(), waiting: needsReceipts() });
 });
 
-export const POST = handle(async (req) => {
+export const POST = handleCan("manage", async (req) => {
   const type = req.headers.get("content-type") || "";
 
   /* The statement itself, as a PDF off the bank's site. */
@@ -30,7 +30,7 @@ export const POST = handle(async (req) => {
   return ok(saveCharge({ ...b, id: b.id }));
 });
 
-export const DELETE = handle(async (req) => {
+export const DELETE = handleCan("manage", async (req) => {
   const id = new URL(req.url).searchParams.get("id");
   if (!id) return bad("id required");
   return ok(removeStatement(id));

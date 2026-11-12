@@ -1,4 +1,4 @@
-import { handle, ok, bad, readJson } from "@/lib/http";
+import { handleCan, handle, ok, bad, readJson } from "@/lib/http";
 import { chatgptStatus, openChatGptLogin } from "@/lib/chatgpt";
 
 export const runtime = "nodejs";
@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export const GET = handle(async () => ok(await chatgptStatus()));
 
 /* Opens Codex's own ChatGPT sign-in in Terminal; Circuit never handles the credential. */
-export const POST = handle(async (req) => {
+export const POST = handleCan("manage", async (req) => {
   const b = await readJson<{ action?: string }>(req);
   if (b.action !== "login") return bad("Unknown action");
   try {

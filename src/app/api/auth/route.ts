@@ -14,11 +14,53 @@ export const runtime = "nodejs";
 
 const THIRTY_DAYS = 60 * 60 * 24 * 30;
 
-const cookie = (token: string, maxAge: number) =>
-  /* HttpOnly keeps it away from page scripts; SameSite=Lax stops another site spending it on a
-     request to Circuit. Secure is left off because this runs on http://localhost today and a
-     Secure cookie would simply never be set — it belongs here the day there is a tunnel. */
-  `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`;
+/* HttpOnly keeps it away from page scripts; SameSite=Lax stops another site spending it on a
+   request to Circuit. Secure when the person came in over https — through the tunnel, which
+   says so in X-Forwarded-Proto — and not on http://localhost, where a Secure cookie would
+   simply never be set. */
+const viaHttps = (req: Request) =>
+  new URL(req.url).protocol === "https:" || req.headers.get("x-forwarded-proto") === "https";
+const cookie = (req: Request, token: string, maxAge: number) =>
+  `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${viaHttps(req) ? "; Secure" : ""}`;
+
+/* Guessing. Once Circuit is reachable from the internet, anyone can try passwords, so ten
+   misses for one email from one address, or fifty from one address, stops that address for
+   fifteen minutes. The address is Cloudflare's report of the real visitor, which the visitor
+   cannot set; on this Mac there is no such header and everything counts as "local". */
+const WINDOW = 15 * 60 * 1000;
+const misses = new Map<string, { n: number; first: number }>();
+const missKeys = (req: Request, email: string) => {
+  const ip = req.headers.get("cf-connecting-ip") || "local";
+  return [`${ip}|${email.trim().toLowerCase()}`, ip];
+};
+function tooMany(keys: string[]): boolean {
+  return keys.some((k, i) => {
+    const m = misses.get(k);
+    if (!m) return false;
+    if (Date.now() - m.first > WINDOW) { misses.delete(k); return false; }
+    return m.n >= (i === 0 ? 10 : 50);
+  });
+}
+function missed(keys: string[]) {
+  for (const k of keys) {
+    const m = misses.get(k);
+    if (!m || Date.now() - m.first > WINDOW) misses.set(k, { n: 1, first: Date.now() });
+    else m.n++;
+  }
+}
+/* Runs a password check under the limit; a success clears that email's count. */
+function guarded<T>(req: Request, email: string, attempt: () => T): T | Response {
+  const keys = missKeys(req, email);
+  if (tooMany(keys)) return bad("Too many tries — wait fifteen minutes and try again", 429);
+  try {
+    const r = attempt();
+    misses.delete(keys[0]);
+    return r;
+  } catch (e) {
+    missed(keys);
+    return bad((e as Error).message, 401);
+  }
+}
 
 export const GET = handle(async (req) => {
   sweepSessions();
@@ -39,7 +81,7 @@ export const POST = handle(async (req) => {
     const { token } = signIn(user.email, b.password || "");
     return new Response(JSON.stringify({ user }), {
       status: 201,
-      headers: { "Content-Type": "application/json", "Set-Cookie": cookie(token, THIRTY_DAYS) },
+      headers: { "Content-Type": "application/json", "Set-Cookie": cookie(req, token, THIRTY_DAYS) },
     });
   }
 
@@ -52,12 +94,14 @@ export const POST = handle(async (req) => {
   }
 
   if (b.action === "recover-confirm") {
-    const user = completeRecovery(b.email || "", b.code || "", b.password || "");
+    const done = guarded(req, b.email || "", () => completeRecovery(b.email || "", b.code || "", b.password || ""));
+    if (done instanceof Response) return done;
+    const user = done;
     /* Straight back in, rather than bouncing them to a sign-in form to retype what they just set. */
     const { token } = signIn(user.email, b.password || "");
     return new Response(JSON.stringify({ user }), {
       status: 200,
-      headers: { "Content-Type": "application/json", "Set-Cookie": cookie(token, THIRTY_DAYS) },
+      headers: { "Content-Type": "application/json", "Set-Cookie": cookie(req, token, THIRTY_DAYS) },
     });
   }
 
@@ -67,14 +111,16 @@ export const POST = handle(async (req) => {
     if (hit) signOut(decodeURIComponent(hit.slice(COOKIE.length + 1)));
     return new Response(JSON.stringify({ ok: true }), {
       status: 200,
-      headers: { "Content-Type": "application/json", "Set-Cookie": cookie("", 0) },
+      headers: { "Content-Type": "application/json", "Set-Cookie": cookie(req, "", 0) },
     });
   }
 
-  const { token, user } = signIn(b.email || "", b.password || "");
+  const signed = guarded(req, b.email || "", () => signIn(b.email || "", b.password || ""));
+  if (signed instanceof Response) return signed;
+  const { token, user } = signed;
   return new Response(JSON.stringify({ user }), {
     status: 200,
-    headers: { "Content-Type": "application/json", "Set-Cookie": cookie(token, THIRTY_DAYS) },
+    headers: { "Content-Type": "application/json", "Set-Cookie": cookie(req, token, THIRTY_DAYS) },
   });
 });
 

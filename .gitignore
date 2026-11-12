@@ -46,3 +46,6 @@ campaign/reel/renders/frames/
 
 # A live password-recovery code. Short-lived, deleted on use, and never committed.
 data/recovery-code.txt
+
+# speech model for video captions — large, local only
+data/models/

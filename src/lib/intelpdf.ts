@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { getDb, newId, now, saveFileBuffer } from "@/lib/db";
+import { getDb, newId, now, saveFileBuffer, tryFilePath } from "@/lib/db";
 import type { IntelItem } from "@/lib/intel";
 
 const run = promisify(execFile);
@@ -159,7 +159,7 @@ export async function briefingPdf(date: string, theme: string, summary: string, 
     getDb().prepare("DELETE FROM intel_pdfs WHERE date = ?").run(date);
     getDb().prepare("INSERT INTO intel_pdfs (id, date, name, mime, bytes, size, theme, items, created_at) VALUES (?, ?, ?, 'application/pdf', ?, ?, ?, ?, ?)")
       .run(id, date, name, buf, buf.length, theme.slice(0, 300), items.length, now());
-    return { id, file_id: saved.id, name, bytes: buf.length, path: path.join(process.cwd(), "data", "uploads", saved.path) };
+    return { id, file_id: saved.id, name, bytes: buf.length, path: tryFilePath(saved) };
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
   }

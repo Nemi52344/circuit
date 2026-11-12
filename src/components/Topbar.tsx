@@ -3,8 +3,9 @@ import { useCallback, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { activeNav } from "@/lib/nav";
 import { api, postJson } from "@/lib/api";
-import { ROLES, asRole } from "@/lib/roles";
+import { ROLES, asRole, can } from "@/lib/roles";
 import { useMe, SignOutButton } from "@/components/Gate";
+import { Bell } from "@/components/Bell";
 
 type Brand = { id: string; slug: string; name: string };
 
@@ -72,11 +73,13 @@ export default function Topbar() {
         <b>{item ? item.label : "Circuit"}</b>
       </div>
       <div className="tb-right">
-        <BrandSwitcher />
+        {/* Switching changes the brand for everyone on this Mac, so it is a manager's call. */}
+        {can(me, "manage") ? <BrandSwitcher /> : null}
         <div className="branch-pill" title="Primary product">
           <span className="dot" />
           Challenger 110 · v1.0
         </div>
+        {me ? <Bell /> : null}
         <button className="tb-btn" type="button" title="Toggle light / dark" aria-label="Toggle light or dark theme" onClick={toggleTheme}>
           <svg className="ic-moon" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
             <path d="M13.5 9.6A5.6 5.6 0 116.4 2.5a4.9 4.9 0 007.1 7.1z" />

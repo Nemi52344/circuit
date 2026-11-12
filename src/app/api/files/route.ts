@@ -17,7 +17,10 @@ export const GET = handle(async (req) => {
   const brand = u.searchParams.get("brand");
   const where: string[] = [];
   const args: unknown[] = [];
-  if (kind) { where.push("kind = ?"); args.push(kind); }
+  /* One kind, or several separated by commas: the Collateral shows the raw shoot and the
+     product photographs together. */
+  const kinds = (kind || "").split(",").map((k) => k.trim()).filter(Boolean).slice(0, 8);
+  if (kinds.length) { where.push(`kind IN (${kinds.map(() => "?").join(", ")})`); args.push(...kinds); }
   if (brand === "1") where.push("brand = 1");
   const sql = `SELECT * FROM files${where.length ? ` WHERE ${where.join(" AND ")}` : ""} ORDER BY created_at DESC`;
   return ok(getDb().prepare(sql).all(...args));

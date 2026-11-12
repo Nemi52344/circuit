@@ -51,23 +51,9 @@ export function HealthStrip() {
   );
 }
 
-/* The whole list, with a backup button. */
-export function HealthPanel({ push }: { push: (t: string, tone?: string) => void }) {
-  const { health, reload, setHealth } = useHealth(60000);
-  const [busy, setBusy] = useState(false);
-  const backUp = async () => {
-    setBusy(true);
-    try {
-      const r = await postJson<Health>("/api/health", { action: "backup" });
-      setHealth(r);
-      push(r.ran ? `Backed up ${mb(r.ran.db_bytes)} of database and linked ${r.ran.pictures} new picture${r.ran.pictures === 1 ? "" : "s"}` : "Backed up", "ok");
-    } catch (e) {
-      push((e as Error).message, "bad");
-    } finally {
-      setBusy(false);
-    }
-  };
-  const last = health?.backups?.[0];
+/* The whole list: every check, with the button that fixes it. */
+export function HealthPanel() {
+  const { health, reload } = useHealth(60000);
   return (
     <section className="panel stack">
       <div className="panel-head" style={{ marginBottom: 0 }}>
@@ -75,7 +61,6 @@ export function HealthPanel({ push }: { push: (t: string, tone?: string) => void
         <span className="actions">
           {health ? <Pill tone={health.bad ? "bad" : health.warn ? "warn" : "ok"}>{health.bad ? `${health.bad} broken` : health.warn ? `${health.warn} to look at` : "All good"}</Pill> : null}
           <button className="btn small" type="button" onClick={reload}>Check again</button>
-          <button className="btn small primary" type="button" disabled={busy} onClick={backUp}>{busy ? "Backing up…" : "Back up now"}</button>
         </span>
       </div>
       <p className="small muted" style={{ margin: 0 }}>Circuit works in the background, so this is where it says what has stopped. It checks itself every minute while this page is open.</p>
@@ -91,7 +76,59 @@ export function HealthPanel({ push }: { push: (t: string, tone?: string) => void
           ))}
         </ul>
       ) : <p className="small muted" style={{ margin: 0 }}>Checking…</p>}
-      {last ? <p className="small muted" style={{ margin: 0 }}>Newest backup: {last.name} · {mb(last.bytes)} · {fmtDate(last.at)}. Kept in data/backups, seven days at a time. Pictures are linked, not copied, so it costs almost no space — copy the whole data folder elsewhere for a real off-machine backup.</p> : null}
+    </section>
+  );
+}
+
+/* Daily ones are named by the date and time they ran; the rest were saved by hand before a
+   change ("circuit-before-files-in-db-…"), and read better as what they were saved before. */
+const DAILY = /-\d{4}-\d{2}-\d{2}-\d{4}\.db$/;
+const backupLabel = (name: string) => DAILY.test(name) ? "Daily backup"
+  : `Before ${name.replace(/^[a-z0-9]+-before-/, "").replace(/\.db$/, "").replace(/-?\d{8}(-\d{6})?|-?\d{4}-\d{2}-\d{2}/g, "").replace(/-+/g, " ").trim() || "a change"}`;
+
+/* The daily backup kept on this Mac: one database file per day, files and all. */
+export function LocalBackupPanel({ push }: { push: (t: string, tone?: string) => void }) {
+  const { health, setHealth } = useHealth();
+  const [busy, setBusy] = useState(false);
+  const backUp = async () => {
+    setBusy(true);
+    try {
+      const r = await postJson<Health>("/api/health", { action: "backup" });
+      setHealth(r);
+      push(r.ran ? `Backed up ${mb(r.ran.db_bytes)}` : "Backed up", "ok");
+    } catch (e) {
+      push((e as Error).message, "bad");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const list = health?.backups || [];
+  const daily = list.filter((x) => DAILY.test(x.name)).length;
+  return (
+    <section className="panel stack">
+      <div className="panel-head" style={{ marginBottom: 0 }}>
+        <h3>Backups on this Mac</h3>
+        <span className="actions">
+          {health ? (daily ? <Pill tone="ok">{daily} daily kept</Pill> : <Pill tone="warn">None yet</Pill>) : null}
+          <button className="btn small primary" type="button" disabled={busy} onClick={backUp}>{busy ? "Backing up…" : "Back up now"}</button>
+        </span>
+      </div>
+      <p className="small muted" style={{ margin: 0 }}>
+        Once a day Circuit saves a full copy of its database — posts, pictures, videos and logins — into <code>data/backups</code>.
+        The last three days are kept. This protects against a mistake; the online backup below protects against losing the Mac.
+      </p>
+      {list.length ? (
+        <ul className="health-list">
+          {list.map((b) => (
+            <li key={b.name} className="ok">
+              <span className="dot ok" />
+              <strong>{backupLabel(b.name)}</strong>
+              <span>{fmtDate(b.at)} · {mb(b.bytes)}</span>
+              <span />
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </section>
   );
 }

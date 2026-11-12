@@ -25,6 +25,9 @@ export type Task = {
   /* Whether a person has to do this or the app could. Blank until somebody says — guessing
      would turn the automation figure into a fiction. */
   doable_by?: string;
+  /* Who has it, as an account, and what kind of work it is — set by the work inbox
+     (lib/inbox.ts) or by a manager moving it. `owner` keeps the name for the Gantt. */
+  assignee_id?: string; kind?: string; request_id?: string; assign_reason?: string; priority?: string;
 };
 
 /* Who could do a piece of work. "person" means it needs judgement, a relationship or a pair
@@ -48,6 +51,14 @@ export type Opex = {
   id: string; item: string; category: string; vendor: string; monthly_cost: number;
   starts_on: string; ends_on: string; notes: string; created_at: string; updated_at: string;
 };
+export type Subscription = {
+  id: string; tool: string; plan: string; monthly_cost: number; billing_day: number; card_name: string;
+  used_for: string; status: string; starts_on: string; ends_on: string; notes: string; created_at: string; updated_at: string;
+  /* As the team's sheet keeps it: who it is for, the price in the currency charged (in its
+     cents) and in rupees (paise) per renewal, how often it renews, what kind of charge, whose
+     card, and when it was last paid. monthly_cost is worked out from period_cost and cycle. */
+  owner: string; currency: string; foreign_cost: number; period_cost: number; cycle: string; kind: string; card_holder: string; last_paid: string;
+};
 export type PnlRow = { month: string; revenue: number; cogs: number; other_in: number; other_out: number; notes: string; updated_at: string };
 
 export const TASK_STATUS = ["planned", "doing", "blocked", "done"] as const;
@@ -66,7 +77,7 @@ export function saveTask(t: Partial<Task> & { title?: string }): Task {
   const at = now();
   if (t.id) {
     const fields = ["title", "notes", "owner", "area", "start_date", "end_date", "status", "progress", "depends_on",
-                    "estimate_minutes", "spent_minutes", "doable_by", "door"] as const;
+                    "estimate_minutes", "spent_minutes", "doable_by", "door", "kind", "priority"] as const;
     const sets: string[] = [];
     const vals: unknown[] = [];
     for (const f of fields) if (t[f] !== undefined) { sets.push(`${f} = ?`); vals.push(t[f]); }
@@ -180,7 +191,132 @@ export function saveOpex(o: Partial<Opex>): Opex {
   return db.prepare("SELECT * FROM opex WHERE id = ?").get(id) as Opex;
 }
 
-export function remove(table: "tasks" | "bills" | "stock" | "people" | "opex", id: string) {
+/* ---- AI subscriptions ---- */
+
+export const SUB_STATUS = ["active", "paused", "cancelled"] as const;
+export const SUB_CYCLES: Record<string, number> = { monthly: 1, quarterly: 3, yearly: 12, "2 years": 24, "3 years": 36, "one-off": 0 };
+export const SUB_KINDS = ["Subscription", "Domain registration", "Ads", "Credits", "Other"] as const;
+/* What a renewal works out to a month; a one-off is not a monthly cost. */
+export const perMonth = (periodCost: number, cycle: string) => {
+  const n = SUB_CYCLES[cycle] ?? 1;
+  return n ? Math.round(periodCost / n) : 0;
+};
+/* An AI or automation tool, as opposed to LinkedIn or a domain: the P&L keeps them apart. */
+export const isAiSub = (x: Pick<Subscription, "tool" | "card_name">) => isAiBill({ vendor: `${x.tool} ${x.card_name}`, category: "" });
+
+export const listSubs = (): Subscription[] =>
+  getDb().prepare("SELECT * FROM subscriptions ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'paused' THEN 1 ELSE 2 END, monthly_cost DESC, tool").all() as Subscription[];
+
+export function saveSub(input: Partial<Subscription>): Subscription {
+  const db = getDb();
+  const at = now();
+  const x = { ...input };
+  if (x.cycle !== undefined && !(x.cycle in SUB_CYCLES)) x.cycle = "monthly";
+  /* Nobody named means the team as a whole. */
+  if (x.owner !== undefined && !x.owner.trim()) x.owner = "Marketing";
+  /* The monthly figure always follows the price and how often it renews. */
+  if (x.period_cost !== undefined || x.cycle !== undefined) {
+    const was = x.id ? db.prepare("SELECT period_cost, cycle FROM subscriptions WHERE id = ?").get(x.id) as { period_cost: number; cycle: string } | undefined : undefined;
+    x.monthly_cost = perMonth(x.period_cost ?? was?.period_cost ?? 0, x.cycle ?? was?.cycle ?? "monthly");
+  } else if (x.monthly_cost !== undefined && !x.id) x.period_cost = x.monthly_cost;
+  if (x.id) {
+    const fields = ["tool", "plan", "monthly_cost", "billing_day", "card_name", "used_for", "status", "starts_on", "ends_on", "notes",
+      "owner", "currency", "foreign_cost", "period_cost", "cycle", "kind", "card_holder", "last_paid"] as const;
+    const sets: string[] = [];
+    const vals: unknown[] = [];
+    for (const f of fields) if (x[f] !== undefined) { sets.push(`${f} = ?`); vals.push(x[f]); }
+    if (sets.length) db.prepare(`UPDATE subscriptions SET ${sets.join(", ")}, updated_at = ? WHERE id = ?`).run(...vals, at, x.id);
+    return db.prepare("SELECT * FROM subscriptions WHERE id = ?").get(x.id) as Subscription;
+  }
+  const id = newId();
+  db.prepare(`INSERT INTO subscriptions (id, tool, plan, monthly_cost, billing_day, card_name, used_for, status, starts_on, ends_on, notes,
+                owner, currency, foreign_cost, period_cost, cycle, kind, card_holder, last_paid, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(id, x.tool || "", x.plan || "", x.monthly_cost || 0, x.billing_day || 0, x.card_name || x.tool || "", x.used_for || "",
+      x.status || "active", x.starts_on || at.slice(0, 10), x.ends_on || "", x.notes || "",
+      x.owner || "Marketing", x.currency || "INR", x.foreign_cost || 0, x.period_cost || 0, x.cycle || "monthly", x.kind || "Subscription", x.card_holder || "", x.last_paid || "", at, at);
+  return db.prepare("SELECT * FROM subscriptions WHERE id = ?").get(id) as Subscription;
+}
+
+/* The company on the card is not always the tool's name: Claude is billed by Anthropic, ChatGPT
+   by OpenAI, Grok by xAI. Each is read as the tool, so the charge finds its subscription. */
+const ALIASES: [RegExp, string][] = [[/anthropic/g, "claude"], [/openai/g, "chatgpt"], [/supergrok/g, "grok"]];
+const squash = (v: string) => ALIASES.reduce((s, [re, to]) => s.replace(re, to),
+  v.toLowerCase().replace(/\bx\.?ai\b/g, "grok").replace(/[^a-z0-9]/g, ""));
+/* Whether a card charge is this subscription: the name the card shows ("CLAUDE.AI SUBSCRIPTION",
+   "OPENAI *CHATGPT") holds the name we gave it, or the other way round. */
+export const chargeIsSub = (vendor: string, sub: Pick<Subscription, "tool" | "card_name">) => {
+  const v = squash(vendor);
+  return [sub.card_name, sub.tool].map(squash).filter((n) => n.length >= 3).some((n) => v.includes(n) || n.includes(v));
+};
+/* Running in a month: between its dates — and a cancelled one only up to the end date it was
+   given, never open-ended. */
+const subOn = (sub: Subscription, month: string): boolean =>
+  activeIn(month, sub.starts_on, sub.ends_on) && (sub.status !== "cancelled" || Boolean(sub.ends_on));
+
+/* Card charges matched to subscriptions. Three Claude seats are three charges called CLAUDE:
+   each charge goes to the seat whose price it is nearest, so no seat is credited with the
+   others'. What matches nothing is handed back. */
+function assignCharges(charges: Bill[], subs: Subscription[]): { got: Map<string, number[]>; loose: Bill[] } {
+  const got = new Map<string, number[]>();
+  const loose: Bill[] = [];
+  for (const b of [...charges].sort((p, q) => q.amount + q.tax - (p.amount + p.tax))) {
+    const amt = b.amount + b.tax;
+    const cands = subs.filter((x) => chargeIsSub(b.vendor, x));
+    if (!cands.length) { loose.push(b); continue; }
+    const free = cands.filter((x) => !got.has(x.id));
+    const pick = (free.length ? free : cands).reduce((best, x) => (Math.abs(x.period_cost - amt) < Math.abs(best.period_cost - amt) ? x : best));
+    got.set(pick.id, [...(got.get(pick.id) || []), amt]);
+  }
+  return { got, loose };
+}
+
+/* What the tools cost in a month, one subscription at a time: what the card charged for it
+   that month when the charge has been entered, what the list says it costs when it has not.
+   An AI charge that belongs to nothing on the list is counted as charged. So a month is never
+   short because a bill is late, and never counted twice once it arrives. */
+export type AiCost = { month: string; total: number; source: "card" | "list" | "mixed" | "none"; other: number };
+export function aiCost(month: string, subs: Subscription[], bills: Bill[]): AiCost {
+  const inMonth = bills.filter((b) => b.bill_date.slice(0, 7) === month && b.amount + b.tax);
+  const running = subs.filter((x) => x.status !== "paused" && subOn(x, month));
+  const { got, loose } = assignCharges(inMonth.filter((b) => isAiBill(b) || running.some((x) => chargeIsSub(b.vendor, x))), running);
+  let ai = 0, other = 0, fromCard = 0, fromList = 0;
+  const future = month > thisMonth();
+  for (const x of running) {
+    const charged = (got.get(x.id) || []).reduce((a, n) => a + n, 0);
+    const amt = charged || (future ? 0 : x.monthly_cost);
+    if (charged) fromCard++; else if (amt) fromList++;
+    if (isAiSub(x)) ai += amt; else other += amt;
+  }
+  for (const b of loose) if (isAiBill(b)) { ai += b.amount + b.tax; fromCard++; }
+  const source = fromCard && fromList ? "mixed" : fromCard ? "card" : fromList ? "list" : "none";
+  return { month, total: ai, source, other };
+}
+
+/* The list beside the card for one month: what each subscription costs and what was charged
+   for it, and the AI charges in the last three months that nothing on the list accounts for. */
+export function subsCheck(month: string, subs: Subscription[] = listSubs(), bills: Bill[] = listBills()) {
+  const shown = subs.filter((x) => x.status !== "cancelled" || subOn(x, month));
+  const inMonth = bills.filter((b) => b.bill_date.slice(0, 7) === month && b.amount + b.tax && (isAiBill(b) || shown.some((x) => chargeIsSub(b.vendor, x))));
+  const { got } = assignCharges(inMonth, shown);
+  const rows = shown.map((x) => {
+    const mine = got.get(x.id) || [];
+    return { id: x.id, tool: x.tool, expected: x.status === "paused" ? 0 : x.period_cost, charged: mine.reduce((a, n) => a + n, 0), charges: mine.length };
+  });
+  const [from] = monthsBack(3, month);
+  const loose = new Map<string, { vendor: string; amount: number; charges: number; month: string }>();
+  for (const b of bills) {
+    const m = b.bill_date.slice(0, 7);
+    if (!(b.amount + b.tax) || !isAiBill(b) || m < from || m > month || subs.some((x) => chargeIsSub(b.vendor, x))) continue;
+    const k = squash(b.vendor);
+    const t = loose.get(k);
+    if (!t || m > t.month) loose.set(k, { vendor: b.vendor.trim(), amount: b.amount + b.tax, charges: 1, month: m });
+    else if (m === t.month) { t.amount += b.amount + b.tax; t.charges += 1; }
+  }
+  return { month, read: inMonth.length > 0, rows, unlisted: [...loose.values()].sort((a, b) => b.amount - a.amount) };
+}
+
+export function remove(table: "tasks" | "bills" | "stock" | "people" | "opex" | "subscriptions", id: string) {
   getDb().prepare(`DELETE FROM ${table} WHERE id = ?`).run(id);
   return { deleted: true };
 }
@@ -213,7 +349,7 @@ export function aiTools(month: string, bills: Bill[] = listBills()): AiMonth {
 
 export type PnlMonth = {
   month: string; revenue: number; cogs: number; gross: number;
-  manpower: number; opex: number; ai: number; other_in: number; other_out: number;
+  manpower: number; opex: number; ai: number; ai_source: AiCost["source"]; spend: number; other_in: number; other_out: number;
   costs: number; net: number; margin: number | null;
   bills: number; bills_unpaid: number; notes: string;
 };
@@ -236,34 +372,41 @@ export function savePnl(row: { month: string } & Partial<PnlRow>): PnlRow {
   return db.prepare("SELECT * FROM pnl WHERE month = ?").get(row.month) as PnlRow;
 }
 
-/* One month, built from the standing lines rather than retyped.
+/* One month of the whole of marketing, built from the lists rather than retyped.
 
-   Bills are reported beside the result, not inside it. A bill for rent and a rent line in opex
-   are the same rupee, and counting both would quietly double the month's costs. AI tools are
-   the one exception: they are counted from their bills and only from their bills, so they must
-   never also be typed as an opex line. */
-export function pnlMonth(month: string, ctx?: { people: Person[]; opex: Opex[]; rows: Map<string, PnlRow>; bills: Bill[] }): PnlMonth {
+   Costs are four things: the people (from the salary list), the AI subscriptions (from the card
+   once it has been read, from the subscriptions list until then), everything else that was
+   billed in the month — ads, domains, printing — and any standing cost on the opex list. A
+   bill and a standing line for the same thing would be the same rupee twice, so a repeating
+   cost goes in one place: the opex list if it never changes, a bill if it does. */
+export function pnlMonth(month: string, ctx?: { people: Person[]; opex: Opex[]; rows: Map<string, PnlRow>; bills: Bill[]; subs?: Subscription[] }): PnlMonth {
   const db = getDb();
   const people = ctx?.people ?? listPeople();
   const ops = ctx?.opex ?? listOpex();
   const row = ctx ? ctx.rows.get(month) : (db.prepare("SELECT * FROM pnl WHERE month = ?").get(month) as PnlRow | undefined);
   const bills = ctx?.bills ?? listBills();
+  const subs = ctx?.subs ?? listSubs();
 
   const manpower = people.filter((p) => activeIn(month, p.started_on, p.ended_on)).reduce((a, p) => a + p.monthly_cost, 0);
-  const ai = aiTools(month, bills).total;
+  const aic = aiCost(month, subs, bills);
+  const ai = aic.total;
   const opexTotal = ops.filter((o) => activeIn(month, o.starts_on, o.ends_on)).reduce((a, o) => a + o.monthly_cost, 0) + ai;
   const inMonth = bills.filter((b) => b.bill_date.slice(0, 7) === month);
+  /* Everything else: the non-AI subscriptions (LinkedIn, a domain — charged or listed, as
+     above), and every other bill in the month that is not one of them. */
+  const subBill = (b: Bill) => subs.some((x) => x.status !== "paused" && subOn(x, month) && chargeIsSub(b.vendor, x));
+  const spend = aic.other + inMonth.filter((b) => !isAiBill(b) && !subBill(b)).reduce((a, b) => a + b.amount + b.tax, 0);
 
   const revenue = row?.revenue || 0;
   const cogs = row?.cogs || 0;
   const otherIn = row?.other_in || 0;
   const otherOut = row?.other_out || 0;
   const gross = revenue - cogs;
-  const costs = manpower + opexTotal + otherOut;
+  const costs = manpower + opexTotal + spend + otherOut;
   const net = gross + otherIn - costs;
 
   return {
-    month, revenue, cogs, gross, manpower, opex: opexTotal, ai,
+    month, revenue, cogs, gross, manpower, opex: opexTotal, ai, ai_source: aic.source, spend,
     other_in: otherIn, other_out: otherOut, costs, net,
     margin: revenue ? Math.round((net / revenue) * 1000) / 10 : null,
     bills: inMonth.reduce((a, b) => a + b.amount + b.tax, 0),
@@ -279,6 +422,7 @@ export function pnlRange(months: string[]): PnlMonth[] {
     people: listPeople(),
     opex: listOpex(),
     bills: listBills(),
+    subs: listSubs(),
     rows: new Map((db.prepare("SELECT * FROM pnl").all() as PnlRow[]).map((r) => [r.month, r])),
   };
   return months.map((m) => pnlMonth(m, ctx));

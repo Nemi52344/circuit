@@ -223,7 +223,7 @@ function Studio() {
       {view}
       <div className="page-head">
         <div>
-          <h2>Create an image</h2>
+          <h1>Create an image</h1>
           <p className="lede">Pick an ad you like and a photo of your bike. We&apos;ll recreate the ad with the Challenger in it.</p>
         </div>
       </div>

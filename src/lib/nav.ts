@@ -1,36 +1,47 @@
 import type { Can } from "@/lib/roles";
 
-/* `needs` hides a page from anybody whose role lacks that grant. The API refuses them anyway;
-   this is so a Marketing Executive is not shown a Finance tab that only ever says no. */
-export type NavItem = { href: string; label: string; group: "Plan" | "Collect" | "Run" | "Manage"; icon: string; needs?: Can };
+/* Two different things decide what a person sees in the menu.
+
+   `needs` is permission: without that grant the page is hidden and the API refuses anyway, so
+   a Marketing Executive is not shown a Finance tab that only ever says no.
+
+   `main` and `more` are attention. The menu is short on purpose — the things this person
+   does every day, and nothing else. A page whose `main` grant they lack, or that is marked
+   `more`, still exists for them: it sits folded under More at the bottom, one click away,
+   instead of crowding out the work. */
+export type NavGroup = "Today" | "Content" | "Know" | "Run";
+export type NavItem = { href: string; label: string; group: NavGroup; icon: string; needs?: Can; main?: Can; more?: boolean };
 export const NAV: NavItem[] = [
-  { href: "/home", label: "Home", group: "Plan", icon: "grid" },
-  { href: "/", label: "Calendar", group: "Plan", icon: "calendar" },
-  { href: "/slots", label: "All posts", group: "Plan", icon: "wall" },
-  { href: "/posting", label: "Posting", group: "Plan", icon: "send" },
-  { href: "/signoff", label: "Sign-off", group: "Plan", icon: "stamp", needs: "approve" },
-  { href: "/poster", label: "Poster studio", group: "Plan", icon: "frame" },
-  { href: "/workflows", label: "Workflows", group: "Plan", icon: "flow" },
-  { href: "/inspiration", label: "Inspiration", group: "Collect", icon: "eye" },
-  { href: "/intel", label: "Daily intel", group: "Plan", icon: "doc" },
-  { href: "/listening", label: "Listening", group: "Collect", icon: "ear" },
-  { href: "/comments", label: "Comments", group: "Collect", icon: "speech" },
-  { href: "/knowledge", label: "What we know", group: "Collect", icon: "bulb" },
-  { href: "/documents", label: "Brochures", group: "Collect", icon: "book" },
-  { href: "/images", label: "Image database", group: "Collect", icon: "camera" },
-  { href: "/library", label: "Library", group: "Collect", icon: "box" },
-  { href: "/learning", label: "Learning", group: "Collect", icon: "cap" },
-  { href: "/work", label: "Work", group: "Run", icon: "bars" },
-  { href: "/admin", label: "Admin", group: "Run", icon: "ledger", needs: "manage" },
-  /* What is plugged in and what runs by itself. Under Run rather than Manage: it answers an
-     operational question — is anything broken — not a configuration one. */
-  { href: "/automation", label: "Crons", group: "Run", icon: "clock", needs: "manage" },
-  { href: "/finance", label: "Finance", group: "Run", icon: "rupee", needs: "finance" },
-  { href: "/reports", label: "Reports", group: "Run", icon: "chart" },
-  { href: "/build", label: "What to build", group: "Manage", icon: "hammer", needs: "manage" },
-  { href: "/people", label: "People", group: "Manage", icon: "people", needs: "people" },
-  { href: "/settings", label: "Settings", group: "Manage", icon: "gear", needs: "manage" },
+  { href: "/home", label: "Home", group: "Today", icon: "grid" },
+  { href: "/work", label: "Work", group: "Today", icon: "bars" },
+  /* Comments on other people's posts, as a daily habit — out from under More. */
+  { href: "/engage", label: "Engager", group: "Today", icon: "speech" },
+  { href: "/", label: "Calendar", group: "Content", icon: "calendar" },
+  { href: "/content", label: "Content status", group: "Content", icon: "stamp" },
+  { href: "/studio", label: "Studio", group: "Content", icon: "frame" },
+  { href: "/library", label: "Library", group: "Content", icon: "box" },
+  { href: "/intel", label: "Daily intel", group: "Know", icon: "doc" },
+  { href: "/learning", label: "Learning", group: "Know", icon: "cap" },
+  { href: "/reports", label: "Reports", group: "Know", icon: "chart", main: "manage" },
+  /* Running the team, three pages with tabs: the money (costs, the P&L, bills and stock), what
+     runs by itself (health, routines), and the settings. The team itself — who does what, who
+     can sign in — lives on the Work page, where the work is given out. */
+  { href: "/money", label: "Money", group: "Run", icon: "rupee", needs: "manage" },
+  { href: "/automation", label: "Automation", group: "Run", icon: "flow", needs: "manage" },
+  { href: "/settings", label: "Settings", group: "Run", icon: "gear", needs: "manage" },
+  /* Kept, working, and rarely the reason anybody opens Circuit. */
+  { href: "/slots", label: "All posts", group: "Content", icon: "wall", more: true },
+  { href: "/listening", label: "Listening", group: "Know", icon: "ear", more: true },
+  { href: "/knowledge", label: "What we know", group: "Know", icon: "bulb", more: true },
+  { href: "/build", label: "What to build", group: "Run", icon: "hammer", needs: "manage", more: true },
 ];
+
+/* What one person's menu holds: the short list, and what folds under More. */
+export function menuFor(allowed: (c: Can) => boolean): { main: NavItem[]; more: NavItem[] } {
+  const mine = NAV.filter((it) => !it.needs || allowed(it.needs));
+  const isMain = (it: NavItem) => !it.more && (!it.main || allowed(it.main));
+  return { main: mine.filter(isMain), more: mine.filter((it) => !isMain(it)) };
+}
 
 export function activeNav(path: string): NavItem | undefined {
   // a single slot lives under Content slots

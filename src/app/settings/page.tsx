@@ -2,9 +2,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, postJson, fileUrl } from "@/lib/api";
 import { Pill, ViewableImage, useToast } from "@/components/ui";
-import { HealthPanel } from "@/components/Health";
+import { HealthPanel, LocalBackupPanel } from "@/components/Health";
 import { PublishingPanel } from "@/components/Publishing";
 import { MailPanel } from "@/components/Mail";
+import { OnlineCopyPanel } from "@/components/OnlineCopy";
+import { SectionTabs, useTab } from "@/components/SectionTabs";
 import type { Brand } from "@/lib/types";
 import { META_SCOPES } from "@/lib/types";
 
@@ -12,7 +14,29 @@ type ClaudeStatus = { installed: boolean; cli_path: string | null; version: stri
 
 type Settings = { has_key: boolean; key_hint: string; has_meta: boolean; meta_hint: string; has_hf: boolean; hf_hint: string; ig_user_id: string; brand: Brand; defaults: Brand; meta_app_id?: string; meta_scopes?: string[] };
 
+/* Settings in five tabs, each named for what it answers: is anything broken, what Circuit is
+   connected to, the brand it writes for, who approves posts, and where the backups are. Most
+   visits come from a health warning, so Status opens first and every fix button links to a tab. */
+const TABS = [
+  { key: "status", label: "Status" },
+  { key: "connections", label: "Apps and accounts" },
+  { key: "brand", label: "Brand profile" },
+  { key: "signoff", label: "Approvals" },
+  { key: "data", label: "Backup" },
+];
+
+/* A heading over a few panels that belong together, so the connections read as three groups. */
+function Group({ title, note, children }: { title: string; note?: string; children: React.ReactNode }) {
+  return (
+    <div className="set-group">
+      <div className="set-group-head"><h2>{title}</h2>{note ? <p className="small muted">{note}</p> : null}</div>
+      {children}
+    </div>
+  );
+}
+
 export default function SettingsPage() {
+  const [tab, setTab] = useTab(TABS, "status");
   const [s, setS] = useState<Settings | null>(null);
   const [key, setKey] = useState("");
   const [meta, setMeta] = useState("");
@@ -175,25 +199,20 @@ export default function SettingsPage() {
   return (
     <div className="stack">
       {view}
-      <div className="page-head">
-        <div>
-          <h2>Settings</h2>
-          <p className="lede">Connect image creation and set up your brand. Everything is saved on this Mac.</p>
-        </div>
-      </div>
+      <SectionTabs title="Settings" tabs={TABS} active={tab} onPick={setTab} />
 
-      <HealthPanel push={push} />
-      <PublishingPanel push={push} />
-      <MailPanel push={push} />
+      {tab === "status" ? <HealthPanel /> : null}
+
+      {tab === "connections" ? (<>
+      <Group title="AI helpers" note="The accounts Circuit uses to write, research and make pictures.">
       <ChatGptPanel push={push} />
-      <ApproversPanel push={push} />
 
       <section className="panel stack">
         <div className="panel-head">
-          <h3>Image creation</h3>
+          <h3>Claude and Higgsfield <span className="muted">· pictures</span></h3>
           {checking ? <Pill>Checking…</Pill> : cc?.ready ? <Pill tone="ok">Ready</Pill> : <Pill tone="warn">{steps.filter((x) => !x.done).length} step{steps.filter((x) => !x.done).length === 1 ? "" : "s"} left</Pill>}
         </div>
-        <p className="small muted" style={{ marginTop: -8 }}>Uses your Claude subscription and Higgsfield credits. No API keys.</p>
+        <p className="small muted" style={{ marginTop: -8 }}>Makes the post images, using your Claude subscription and your Higgsfield credits. No API keys needed.</p>
         <div className="checks">
           {steps.map((step) => (
             <div key={step.title} className="check">
@@ -207,10 +226,56 @@ export default function SettingsPage() {
           <button className="btn small" type="button" disabled={ccBusy} onClick={loadClaude}>{ccBusy ? "Checking…" : "Check again"}</button>
         </div>
       </section>
+      </Group>
 
+      <Group title="Social media" note="Where posts go out, and where Circuit reads Instagram and Facebook from.">
+      <PublishingPanel push={push} />
+
+      <section className="panel stack">
+        <div className="panel-head" style={{ marginBottom: 0 }}><h3>Instagram and Facebook data <span className="muted">· Meta</span></h3>{s.has_meta ? <Pill tone="ok">Connected</Pill> : <Pill>Not connected</Pill>}</div>
+        <p className="small muted" style={{ margin: 0 }}>
+          One Meta token lets Circuit read competitors&apos; posts, read our own reach and comments, and publish to Instagram and the
+          Facebook page.
+        </p>
+        <details className="more">
+          <summary>How to get the token ›</summary>
+          <p className="small muted" style={{ margin: "8px 0 0" }}>
+            Open the{" "}
+            <a href={`https://developers.facebook.com/tools/explorer/?app_id=${s.meta_app_id || ""}&permissions=${META_SCOPES}`}
+              target="_blank" rel="noreferrer" style={{ textDecoration: "underline" }}>Graph API Explorer with every permission already ticked</a>,
+            press Generate Access Token, sign in, and paste it below. Circuit swaps it for a 60-day one and renews it by itself.
+          </p>
+          <div className="actions" style={{ marginTop: 8 }}>
+            <button className="btn small ghost" type="button"
+              onClick={() => navigator.clipboard?.writeText(META_SCOPES).then(() => push("Permissions copied", "ok")).catch(() => push("Select them by hand", "bad"))}>
+              Copy the permission list
+            </button>
+            <span className="small muted mono" style={{ wordBreak: "break-all" }}>{META_SCOPES.replace(/,/g, "  ")}</span>
+          </div>
+        </details>
+        <div className="fetch-row">
+          <input className="input" type="password" value={meta} onChange={(e) => setMeta(e.target.value)} placeholder={s.has_meta ? "Paste a new token to replace the saved one" : "Paste the access token"} aria-label="Meta access token" autoComplete="off" />
+          <span className="actions">
+            <button className="btn primary" type="button" disabled={busy} onClick={saveMeta}>Save</button>
+            {s.has_meta ? <button className="btn" type="button" disabled={busy} onClick={testMeta}>Test</button> : null}
+            {s.has_meta ? <button className="btn ghost" type="button" onClick={removeMeta}>Remove</button> : null}
+          </span>
+        </div>
+        {metaMsg ? <div className={`note ${metaMsg.ok ? "ok" : "bad"}`}>{metaMsg.message}</div> : null}
+        <InstagramConnect hasToken={s.has_meta} push={push} />
+      </section>
+      </Group>
+
+      <Group title="Email" note="How the morning briefing and other mail leave Circuit.">
+      <MailPanel push={push} />
+      <MailPanel push={push} part="archive" />
+      </Group>
+      </>) : null}
+
+      {tab === "brand" ? (<>
       <form className="panel stack" onSubmit={saveBrand}>
         <div className="panel-head"><h3>Your brand</h3></div>
-        <p className="small muted" style={{ marginTop: -8 }}>Used whenever Circuit writes a prompt or a brief.</p>
+        <p className="small muted" style={{ marginTop: -8 }}>Every caption, brief and image prompt Circuit writes starts from this.</p>
         <div className="form-grid">
           <label className="field full"><span>Website <em>ChatGPT reads it to learn what you sell, who buys and what they care about</em></span><input className="input" value={brand.website || ""} onChange={(e) => setBrand({ ...brand, website: e.target.value })} placeholder="https://www.yourbrand.in" /></label>
           <label className="field"><span>Brand name</span><input className="input" value={brand.name} onChange={(e) => setBrand({ ...brand, name: e.target.value })} /></label>
@@ -220,46 +285,33 @@ export default function SettingsPage() {
           <label className="field"><span>Brand colours</span><input className="input" value={brand.colors} onChange={(e) => setBrand({ ...brand, colors: e.target.value })} /></label>
           <label className="field full"><span>Facts you can claim <em>only these appear in copy</em></span><textarea className="textarea" rows={2} value={brand.claims} onChange={(e) => setBrand({ ...brand, claims: e.target.value })} placeholder="For example: 120 km certified range; 3 year battery warranty" /></label>
         </div>
-        <div className="actions"><button className="btn primary" type="submit" disabled={busy}>Save</button><button className="btn ghost" type="button" onClick={() => setBrand(s.defaults)}>Reset</button></div>
+        <div className="actions"><button className="btn primary" type="submit" disabled={busy}>Save brand</button><button className="btn ghost" type="button" onClick={() => setBrand(s.defaults)}>Back to the defaults</button></div>
       </form>
 
       <BrandLearned kick={researchKick} onUseFacts={(facts) => { if (!brand) return; const next = { ...brand, claims: [brand.claims, ...facts].filter(Boolean).join("; ") }; setBrand(next); postJson("/api/settings", { brand: next }).then(() => push("Added to facts you can claim", "ok")); }} push={push} />
       <ProductFolder push={push} />
+      </>) : null}
 
+      {tab === "signoff" ? <ApproversPanel push={push} /> : null}
+
+      {tab === "data" ? (<>
+      <div className="note small">
+        <strong>Where your data lives</strong>
+        Everything — posts, pictures, videos, logins and the money pages — is kept in one database on this Mac, in the app&apos;s <code>data</code> folder.
+        There are two backups of it below: a daily one on this Mac, and one online that updates every minute.
+      </div>
+      <LocalBackupPanel push={push} />
+      <OnlineCopyPanel push={push} />
+      </>) : null}
+
+      {tab === "connections" ? (
       <details className="panel more">
-        <summary style={{ fontSize: 15, fontWeight: 600, color: "var(--ink)" }}>Advanced connections ›</summary>
+        <summary style={{ fontSize: 15, fontWeight: 600, color: "var(--ink)" }}>Optional API keys ›</summary>
         <div className="stack" style={{ marginTop: 16 }}>
-          <p className="small muted">Optional API keys. You don&apos;t need these to create images.</p>
+          <p className="small muted">Paid alternatives for making images. You don&apos;t need these: Claude and Higgsfield above already make them.</p>
 
           <div className="stack" style={{ gap: 10 }}>
-            <div className="panel-head" style={{ marginBottom: 0 }}><h3>Meta connection</h3>{s.has_meta ? <Pill tone="ok">Connected</Pill> : <Pill>Not connected</Pill>}</div>
-            <p className="small muted">
-              One token covers everything: reading competitors, our own numbers, publishing to Instagram and the
-              Facebook page, and reading comments. Open the{" "}
-              <a href={`https://developers.facebook.com/tools/explorer/?app_id=${s.meta_app_id || ""}&permissions=${META_SCOPES}`}
-                target="_blank" rel="noreferrer" style={{ textDecoration: "underline" }}>Graph API Explorer with all of them already ticked</a>,
-              press Generate Access Token, sign in, and paste it below. Circuit swaps it for a 60-day one and renews it by itself.
-            </p>
-            <div className="actions" style={{ marginTop: 4 }}>
-              <button className="btn small ghost" type="button"
-                onClick={() => navigator.clipboard?.writeText(META_SCOPES).then(() => push("Permissions copied", "ok")).catch(() => push("Select them by hand", "bad"))}>
-                Copy the permission list
-              </button>
-              <span className="small muted mono" style={{ wordBreak: "break-all" }}>{META_SCOPES.replace(/,/g, "  ")}</span>
-            </div>
-            <div className="fetch-row">
-              <input className="input" type="password" value={meta} onChange={(e) => setMeta(e.target.value)} placeholder="Paste access token" aria-label="Meta access token" autoComplete="off" />
-              <span className="actions">
-                <button className="btn primary" type="button" disabled={busy} onClick={saveMeta}>Save</button>
-                {s.has_meta ? <button className="btn ghost" type="button" onClick={removeMeta}>Remove</button> : null}
-              </span>
-            </div>
-            {metaMsg ? <div className={`note ${metaMsg.ok ? "ok" : "bad"}`}>{metaMsg.message}</div> : null}
-            <InstagramConnect hasToken={s.has_meta} push={push} />
-          </div>
-
-          <div className="stack" style={{ gap: 10 }}>
-            <div className="panel-head" style={{ marginBottom: 0 }}><h3>Higgsfield API</h3>{s.has_hf ? <Pill tone="ok">Connected</Pill> : <Pill>Not connected</Pill>}</div>
+            <div className="panel-head" style={{ marginBottom: 0 }}><h3>Higgsfield API key</h3>{s.has_hf ? <Pill tone="ok">Connected</Pill> : <Pill>Not connected</Pill>}</div>
             <p className="small muted">A separate paid API balance. Get a key at <a href="https://cloud.higgsfield.ai" target="_blank" rel="noreferrer" style={{ textDecoration: "underline" }}>cloud.higgsfield.ai</a>.</p>
             <div className="form-grid">
               <input className="input" value={hfId} onChange={(e) => setHfId(e.target.value)} placeholder="Key id" aria-label="Key id" autoComplete="off" />
@@ -274,7 +326,7 @@ export default function SettingsPage() {
           </div>
 
           <div className="stack" style={{ gap: 10 }}>
-            <div className="panel-head" style={{ marginBottom: 0 }}><h3>Google Gemini</h3>{s.has_key ? <Pill tone="ok">Connected</Pill> : <Pill>Not connected</Pill>}</div>
+            <div className="panel-head" style={{ marginBottom: 0 }}><h3>Google Gemini API key</h3>{s.has_key ? <Pill tone="ok">Connected</Pill> : <Pill>Not connected</Pill>}</div>
             <p className="small muted">Image creation needs billing turned on for your Google project. Get a key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" style={{ textDecoration: "underline" }}>aistudio.google.com</a>.</p>
             <div className="fetch-row">
               <input className="input" type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder="Paste API key" aria-label="API key" autoComplete="off" />
@@ -286,13 +338,9 @@ export default function SettingsPage() {
             </div>
             {testMsg ? <div className={`note ${testMsg.ok ? "ok" : "bad"}`}>{testMsg.message}</div> : null}
           </div>
-
-          <div className="note small">
-            <strong>Your data</strong>
-            Everything is stored in <code>data/</code> inside the app folder. Copy that folder to back it up. Nothing is posted or sent without you pressing a button.
-          </div>
         </div>
       </details>
+      ) : null}
     </div>
   );
 }
@@ -333,7 +381,7 @@ function BrandLearned({ kick, onUseFacts, push }: { kick: number; onUseFacts: (f
   return (
     <section className="panel stack">
       <div className="panel-head" style={{ marginBottom: 0 }}>
-        <h3>What ChatGPT learned about your brand</h3>
+        <h3>What ChatGPT learned from your website</h3>
         <button className="btn small" type="button" disabled={busy || Boolean(waiting) || !info.website} onClick={research}>{busy ? "Reading the site…" : p ? "Learn again" : "Learn from my website"}</button>
       </div>
       {!info.website ? <p className="small muted" style={{ margin: 0 }}>Add your website above and save. ChatGPT reads it, then researches your audience and competitors. Topic ideas on the calendar build on this.</p> : null}
@@ -415,15 +463,15 @@ function ChatGptPanel({ push }: { push: (t: string, tone?: string) => void }) {
     setBusy(true);
     try { const r = await postJson<{ message: string }>("/api/chatgpt", { action: "login" }); push(r.message, "ok"); } catch (e) { push((e as Error).message, "bad"); } finally { setBusy(false); }
   };
-  const toggle = async (enabled: boolean) => { setW(await postJson<WorkerInfo>("/api/worker", { enabled })); push(enabled ? "ChatGPT will work automatically" : "Automatic work paused", "ok"); };
+  const toggle = async (enabled: boolean) => { setW(await postJson<WorkerInfo>("/api/worker", { enabled })); push(enabled ? "ChatGPT will work in the background" : "Background work paused", "ok"); };
   const ready = Boolean(gpt?.installed && gpt.logged_in);
   return (
     <section className="panel stack">
       <div className="panel-head" style={{ marginBottom: 0 }}>
-        <h3>ChatGPT</h3>
+        <h3>ChatGPT <span className="muted">· writing and research</span></h3>
         {!gpt ? <Pill>Checking…</Pill> : ready ? <Pill tone="ok">Signed in</Pill> : <Pill tone="warn">{gpt.installed ? "Not signed in" : "Not installed"}</Pill>}
       </div>
-      <p className="small muted" style={{ margin: 0 }}>Uses your own ChatGPT account to learn your brand, write topic ideas, research posts and write captions, automatically. Runs are read-only: it searches the web and sends back text. Images still use Higgsfield.</p>
+      <p className="small muted" style={{ margin: 0 }}>Uses your own ChatGPT account to learn your brand, find topic ideas, research posts and write captions. It only searches the web and sends back text; pictures come from Claude and Higgsfield below.</p>
       {gpt && !gpt.installed ? <div className="note bad"><strong>ChatGPT desktop app not found</strong>Install the ChatGPT app for Mac; it includes Codex, which Circuit uses to sign in.</div> : null}
       <div className="actions">
         {gpt?.installed && !gpt.logged_in ? <button className="btn primary" type="button" disabled={busy} onClick={login}>Sign in with ChatGPT</button> : null}
@@ -431,7 +479,7 @@ function ChatGptPanel({ push }: { push: (t: string, tone?: string) => void }) {
         {w && ready ? (
           <label className="switch">
             <input type="checkbox" checked={w.enabled} onChange={(e) => toggle(e.target.checked)} />
-            <span>Work automatically</span>
+            <span>Work in the background</span>
           </label>
         ) : null}
       </div>
@@ -473,7 +521,7 @@ function ApproversPanel({ push }: { push: (t: string, tone?: string) => void }) 
   };
   return (
     <section className="panel stack">
-      <div className="panel-head" style={{ marginBottom: 0 }}><h3>Team sign-off</h3>{list.length ? <Pill tone="ok">{list.filter((a) => a.required).length} must approve</Pill> : <Pill>Off</Pill>}</div>
+      <div className="panel-head" style={{ marginBottom: 0 }}><h3>Who approves posts</h3>{list.length ? <Pill tone="ok">{list.filter((a) => a.required).length} must approve</Pill> : <Pill>Off</Pill>}</div>
       <p className="small muted" style={{ margin: 0 }}>Each person gets their own review link for every post. A post can only be scheduled after everyone marked &ldquo;must approve&rdquo; approves that exact image and captions.</p>
       {list.length ? (
         <div className="sign-list">
@@ -561,7 +609,7 @@ function InstagramConnect({ hasToken, push }: { hasToken: boolean; push: (t: str
   return (
     <div className="stack" style={{ gap: 8 }}>
       <div className="panel-head" style={{ marginBottom: 0 }}>
-        <h3 style={{ fontSize: 14 }}>Competitors&apos; Instagram posts</h3>
+        <h3 style={{ fontSize: 14 }}>Your Instagram account</h3>
         {connected ? <Pill tone="ok">Connected{st.ig_username ? ` as @${st.ig_username}` : ""}</Pill> : <Pill>{hasToken ? "One step left" : "Needs the token above"}</Pill>}
       </div>
       <p className="small muted" style={{ margin: 0 }}>
@@ -582,7 +630,7 @@ function InstagramConnect({ hasToken, push }: { hasToken: boolean; push: (t: str
             <button className="btn small ghost" type="button" disabled={Boolean(busy)} onClick={() => act("forget_app")}>Stop renewing automatically</button>
           </div>
         </div>
-      ) : (
+      ) : hasToken ? (
         <div className="note warn small">
           <strong>This token dies in about an hour unless you do this once</strong>
           A token from the Graph API Explorer is short-lived, which is why competitors&apos; posts keep stopping. Paste your app&apos;s id and secret (Meta, My Apps, Circuit BNC, Settings, Basic) and Circuit swaps it for a 60-day one — and from then on renews it by itself, so you never come back here.
@@ -598,7 +646,7 @@ function InstagramConnect({ hasToken, push }: { hasToken: boolean; push: (t: str
           </div>
           <p className="small muted" style={{ margin: "6px 0 0" }}>Both stay on this Mac beside the token and are only ever sent to Meta. The token has to be alive when you press this — if it has already expired, generate a fresh one in the Explorer and save it first.</p>
         </div>
-      )}
+      ) : null}
       {choices.length > 1 ? (
         <div className="sign-list">
           {choices.map((c) => (

@@ -49,7 +49,7 @@ async function generateOne(apiKey: string, inspirationId: string, productId: str
   if (!prod) throw new Error("Product not found");
   const ref = readFileBase64(insp.file_id);
   const product = readFileBase64(prod.file_id);
-  if (!ref || !product) throw new Error("Image files are missing on disk");
+  if (!ref || !product) throw new Error("Those pictures are not stored in Circuit");
   const brand = getBrand();
   const prompt = buildRecreatePrompt({
     brand: brand.name,

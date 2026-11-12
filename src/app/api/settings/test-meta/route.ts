@@ -1,9 +1,9 @@
-import { handle, ok, readJson } from "@/lib/http";
+import { handleCan, ok, readJson } from "@/lib/http";
 import { testMetaToken, getMetaToken } from "@/lib/meta";
 
 export const runtime = "nodejs";
 
-export const POST = handle(async (req) => {
+export const POST = handleCan("manage", async (req) => {
   const b = await readJson<{ token?: string }>(req);
   const token = (b.token || getMetaToken() || "").trim();
   if (!token) return ok({ ok: false, message: "No token to test" });

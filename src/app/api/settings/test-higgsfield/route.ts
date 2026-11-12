@@ -1,9 +1,9 @@
-import { handle, ok, readJson } from "@/lib/http";
+import { handleCan, ok, readJson } from "@/lib/http";
 import { testCreds, getHfCreds } from "@/lib/higgsfield";
 
 export const runtime = "nodejs";
 
-export const POST = handle(async (req) => {
+export const POST = handleCan("manage", async (req) => {
   const b = await readJson<{ key_id?: string; key_secret?: string }>(req);
   const stored = getHfCreds();
   const id = (b.key_id || stored?.id || "").trim();

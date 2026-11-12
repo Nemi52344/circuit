@@ -82,9 +82,11 @@ export function handle(fn: (req: Request, ctx: { params: Promise<Record<string, 
   return async (req: Request, ctx: { params: Promise<Record<string, string>> }) => {
     try {
       const url = new URL(req.url);
-      /* Remembered from whatever request arrives first, so the worker can call back on the port
-         this server is really listening on. */
-      global.__circuitOrigin = url.origin;
+      /* Remembered from a request made on this Mac, so the worker can call back on the port
+         this server is really listening on. Only a local one: through the tunnel the address is
+         the public one, and the worker's calls — secret and all — would go out to the internet
+         and back in. */
+      if (/^(localhost|127\.0\.0\.1|\[::1\])$/.test(url.hostname) && !req.headers.get("cf-connecting-ip")) global.__circuitOrigin = url.origin;
       const path = url.pathname;
       const internal = req.headers.get(INTERNAL_HEADER);
       const isInternal = Boolean(internal && internal === internalSecret());

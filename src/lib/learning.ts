@@ -2,6 +2,7 @@ import { getDb, newId, now } from "@/lib/db";
 import { runChatGptJson } from "@/lib/chatgpt";
 import { MODULES } from "@/lib/modules";
 import { ROLES } from "@/lib/roles";
+import { LEVELS, ALL_LESSONS, LESSON_PASS, questionId, lessonById, levelByKey } from "@/lib/syllabus";
 
 /* Tests for the marketing team.
 
@@ -148,7 +149,15 @@ function ensureSeed() {
   const put = db.prepare(`INSERT OR IGNORE INTO learning_questions (id, kind, topic, question, options, answer, why, source, status, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, 'seed', 'live', ?)`);
   const at = now();
-  db.transaction(() => { for (const [id, kind, topic, q, opts, a, why] of SEED) put.run(`seed-${id}`, kind, topic, q, JSON.stringify(opts), a, why, at); })();
+  /* The course's own checks are kept in step with lib/syllabus.ts: a corrected question or
+     answer there corrects it here, without touching whether a manager retired it. */
+  const course = db.prepare(`INSERT INTO learning_questions (id, kind, topic, question, options, answer, why, source, status, created_at)
+    VALUES (?, 'marketing', ?, ?, ?, ?, ?, 'syllabus', 'live', ?)
+    ON CONFLICT(id) DO UPDATE SET topic = excluded.topic, question = excluded.question, options = excluded.options, answer = excluded.answer, why = excluded.why`);
+  db.transaction(() => {
+    for (const [id, kind, topic, q, opts, a, why] of SEED) put.run(`seed-${id}`, kind, topic, q, JSON.stringify(opts), a, why, at);
+    for (const l of ALL_LESSONS) l.checks.forEach(([q, opts, a, why], i) => course.run(questionId(l.id, i), l.title, q, JSON.stringify(opts), a, why, at));
+  })();
 }
 
 export function listQuestions(opts: { status?: string; kind?: string } = {}): Question[] {
@@ -193,19 +202,37 @@ export type Asked = { id: string; kind: Kind; topic: string; question: string; o
 const asked = (q: Question, order = q.options.map((_, i) => i)): Asked =>
   ({ id: q.id, kind: q.kind, topic: q.topic, question: q.question, options: order.map((i) => q.options[i]) });
 
+/* What a test draws from: a kind of question, everything, one lesson's check, or a level. */
+function poolFor(kind: string): { pool: Question[]; ordered: boolean } {
+  const live = listQuestions({ status: "live" });
+  if (kind.startsWith("lesson:")) {
+    const l = lessonById(kind.slice(7));
+    if (!l) throw new Error("That lesson was not found.");
+    const ids = l.checks.map((_, i) => questionId(l.id, i));
+    return { pool: ids.flatMap((id) => live.filter((q) => q.id === id)), ordered: true };
+  }
+  if (kind.startsWith("level:")) {
+    const lv = levelByKey(kind.slice(6));
+    if (!lv) throw new Error("That level was not found.");
+    const prefixes = lv.lessons.map((l) => `syl-${l.id}-`);
+    return { pool: live.filter((q) => prefixes.some((p) => q.id.startsWith(p))), ordered: false };
+  }
+  return { pool: kind === "mixed" ? live : live.filter((q) => q.kind === kind), ordered: false };
+}
+
 export function startTest(who: Taker, kind: string): { attempt: string; questions: Asked[] } {
-  const pool = listQuestions({ status: "live", kind: kind === "mixed" ? "" : kind });
+  const { pool, ordered } = poolFor(kind);
   if (!pool.length) throw new Error("There are no questions of that kind yet. Ask a Marketing Manager to add some.");
   /* Questions this person has not seen come first, so a second test is not the first one again. */
   const seen = new Set((getDb().prepare("SELECT question_ids FROM learning_attempts WHERE user_id = ?").all(who.id) as { question_ids: string }[])
     .flatMap((r) => JSON.parse(r.question_ids) as string[]));
   const fresh = shuffle(pool.filter((q) => !seen.has(q.id)));
   const again = shuffle(pool.filter((q) => seen.has(q.id)));
-  const picked = [...fresh, ...again].slice(0, TEST_SIZE);
+  const picked = ordered ? pool : [...fresh, ...again].slice(0, TEST_SIZE);
   const orders = picked.map((q) => shuffle(q.options.map((_, i) => i)));
   const id = newId();
   getDb().prepare(`INSERT INTO learning_attempts (id, user_id, user_name, kind, question_ids, orders, total, started_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-    .run(id, who.id, who.name, isKind(kind) ? kind : "mixed", JSON.stringify(picked.map((q) => q.id)), JSON.stringify(orders), picked.length, now());
+    .run(id, who.id, who.name, isKind(kind) || /^(lesson|level):[a-z0-9]+$/.test(kind) ? kind : "mixed", JSON.stringify(picked.map((q) => q.id)), JSON.stringify(orders), picked.length, now());
   return { attempt: id, questions: picked.map((q, i) => asked(q, orders[i])) };
 }
 
@@ -231,7 +258,46 @@ export function submitTest(who: Taker, attemptId: string, answers: number[]): { 
   db.prepare("UPDATE learning_attempts SET answers = ?, score = ?, total = ?, finished_at = ? WHERE id = ?")
     .run(JSON.stringify(marked.map((m) => m.chose)), score, marked.length, now(), a.id);
   const percent = marked.length ? Math.round((score / marked.length) * 100) : 0;
-  return { score, total: marked.length, percent, passed: percent >= PASS_MARK, marked };
+  /* A lesson's three-question check passes on two right; everything else on the usual mark. */
+  const passed = a.kind.startsWith("lesson:") ? score >= Math.min(LESSON_PASS, marked.length) : percent >= PASS_MARK;
+  return { score, total: marked.length, percent, passed, marked };
+}
+
+/* ── the course ────────────────────────────────────────────────────────── */
+
+export type Progress = { lessons: Record<string, { passed: boolean; best: number; total: number }>; levels: Record<string, { passed: boolean; best: number; tries: number }> };
+
+/* Where somebody is in the course, read from the tests they have handed in. */
+export function progressOf(userId: string): Progress {
+  const rows = getDb().prepare("SELECT kind, score, total FROM learning_attempts WHERE user_id = ? AND finished_at IS NOT NULL AND (kind LIKE 'lesson:%' OR kind LIKE 'level:%')")
+    .all(userId) as { kind: string; score: number; total: number }[];
+  const out: Progress = { lessons: {}, levels: {} };
+  for (const r of rows) {
+    if (r.kind.startsWith("lesson:")) {
+      const k = r.kind.slice(7);
+      const was = out.lessons[k] || { passed: false, best: 0, total: r.total };
+      out.lessons[k] = { passed: was.passed || r.score >= Math.min(LESSON_PASS, r.total), best: Math.max(was.best, r.score), total: r.total };
+    } else {
+      const k = r.kind.slice(6);
+      const pct = r.total ? Math.round((r.score / r.total) * 100) : 0;
+      const was = out.levels[k] || { passed: false, best: 0, tries: 0 };
+      out.levels[k] = { passed: was.passed || pct >= PASS_MARK, best: Math.max(was.best, pct), tries: was.tries + 1 };
+    }
+  }
+  return out;
+}
+
+/* For the Manager and the Admin: how far each person has got through the course. */
+export function teamCourse(): { user_id: string; name: string; lessons: number; levels: string[] }[] {
+  const ids = getDb().prepare("SELECT DISTINCT user_id, user_name FROM learning_attempts WHERE finished_at IS NOT NULL").all() as { user_id: string; user_name: string }[];
+  return ids.map(({ user_id, user_name }) => {
+    const p = progressOf(user_id);
+    return {
+      user_id, name: user_name,
+      lessons: Object.values(p.lessons).filter((x) => x.passed).length,
+      levels: LEVELS.filter((l) => p.levels[l.key]?.passed).map((l) => l.label),
+    };
+  });
 }
 
 export function myAttempts(userId: string) {
@@ -274,7 +340,7 @@ const PLATFORM_FACTS = () => [
   ...MODULES.map((m) => `- ${m.name} (${m.page}, ${m.auto}): ${m.does} A person: ${m.person}`),
   ...ROLES.map((r) => `- Login "${r.label}": ${r.what}`),
   "- Sign-off: a post needs a Marketing Manager or the Admin to sign it off; any change to the words or picture voids it. Instagram posts cannot be deleted through the API.",
-  "- Comments: Circuit finds LinkedIn posts, fetches X posts by pasted link, and writes five options per post (answer, number, question, experience, pushback). A person leaves the comment.",
+  "- Engager (formerly Comments): Circuit finds LinkedIn and X posts by search, takes LinkedIn, X, Instagram and Facebook posts by pasted link, and writes five options per post (answer, number, question, experience, pushback). A person leaves the comment; the day's goal is five.",
   "- Captions use only claims approved in What we know.",
 ].join("\n");
 

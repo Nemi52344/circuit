@@ -1,5 +1,5 @@
 import { getSetting, setSetting, getDb } from "@/lib/db";
-import { handle, ok, bad, readJson } from "@/lib/http";
+import { handleCan, handle, ok, bad, readJson } from "@/lib/http";
 import { discoverInstagramAccounts, getMetaToken, igCompetitorPosts, extendToken, renewalCredentials, tokenInfo } from "@/lib/meta";
 import { getCompetitors } from "@/lib/sources";
 
@@ -20,7 +20,7 @@ export const GET = handle(async () =>
 
 /* "find": list the Instagram professional accounts this token can use, and save it when there's
    only one. "test": prove the connection by reading one competitor's latest posts. */
-export const POST = handle(async (req) => {
+export const POST = handleCan("manage", async (req) => {
   const b = await readJson<{ action?: string; ig_user_id?: string; username?: string; handle?: string; app_id?: string; app_secret?: string }>(req);
   if (!getMetaToken()) return bad("Save your Meta token first");
   try {

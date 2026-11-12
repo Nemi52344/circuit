@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { getDb, getSetting, setSetting, now, uploadDir, forEachBrand, listBrands, currentBrand } from "@/lib/db";
+import { getDb, getSetting, setSetting, now, forEachBrand, listBrands, currentBrand, tryFilePath } from "@/lib/db";
 import { runChatGptJson, runChatGptImage, codexPath } from "@/lib/chatgpt";
 import { igSyncDue, syncCompetitorInstagram } from "@/lib/igsync";
 import { backupDue, runBackup } from "@/lib/backup";
@@ -217,8 +217,7 @@ type RenderJob = { id: string; prompt: string; reference_file_id: string | null;
 
 function uploadPath(fileId: string | null) {
   if (!fileId) return null;
-  const row = getDb().prepare("SELECT path FROM files WHERE id = ?").get(fileId) as { path: string } | undefined;
-  const p = row ? path.join(uploadDir(), row.path) : null;
+  const p = tryFilePath(fileId) || null;
   return p && fs.existsSync(p) ? p : null;
 }
 
@@ -281,6 +280,36 @@ async function brandPass(brandName: string) {
       state.history = state.history.slice(0, 30);
     }
 
+    // the online copy in Turso, a few minutes behind this Mac; a failure is shown, never fatal
+    const { mirrorDue, pushMirror } = await import("@/lib/mirror");
+    if (mirrorDue()) {
+      const r = await pushMirror().catch((e: Error) => ({ ok: false, sent: 0, deleted: 0, error: e.message }));
+      if (!r.ok || r.sent || r.deleted) {
+        state.history.unshift({ id: "", kind: "mirror", label: r.ok ? `Sent ${r.sent + r.deleted} change${r.sent + r.deleted === 1 ? "" : "s"} to the online copy` : "Couldn't update the online copy", ok: r.ok, error: r.error || "", started_at: now(), finished_at: now(), seconds: 0 });
+        state.history = state.history.slice(0, 30);
+      }
+    }
+
+    // work arriving by email: look at the folder, then read whatever is waiting into tasks
+    const { mailWorkDue, checkWorkMail } = await import("@/lib/mailwork");
+    if (mailWorkDue()) {
+      const r = await checkWorkMail().then((x) => ({ ok: true, found: x.found, error: "" })).catch((e: Error) => ({ ok: false, found: 0, error: e.message }));
+      if (!r.ok || r.found) {
+        state.history.unshift({ id: "", kind: "mail", label: r.ok ? `${r.found} work email${r.found === 1 ? "" : "s"} arrived` : "Couldn't read the work mail folder", ok: r.ok, error: r.error, started_at: now(), finished_at: now(), seconds: 0 });
+        state.history = state.history.slice(0, 30);
+      }
+    }
+    const { unreadRequests, readRequest } = await import("@/lib/inbox");
+    for (const req of unreadRequests(2)) await readRequest(req.id).catch(() => null);
+
+    // raw collateral from the watched folder (the synced OneDrive folder), in the background
+    const { watchDue, scanWatchFolder } = await import("@/lib/collateral");
+    if (watchDue()) scanWatchFolder().catch(() => null);
+
+    // reels waiting in the video studio; the edit carries on in the background
+    const { workVideoQueue } = await import("@/lib/videoedit");
+    workVideoQueue().catch(() => null);
+
     // keep the Meta connection alive: swap the token for a fresh one before it runs out
     if (autoRenewDue()) {
       const r = await renewStoredToken().then((x) => ({ ok: true, until: x.until, error: "" })).catch((e: Error) => ({ ok: false, until: "", error: e.message }));
@@ -314,6 +343,13 @@ async function brandPass(brandName: string) {
         state.history.unshift({ id: "", kind: "intel", label: r.taken.length ? `Took the briefing for ${r.taken.map((t) => t.date).join(", ")}` : "Could not take the briefing from the folder", ok: !r.errors.length, error: r.errors[0] || "", started_at: now(), finished_at: now(), seconds: 0 });
         state.history = state.history.slice(0, 30);
       }
+    }
+
+    // pop-ups for what has become true: a routine waiting, work due tomorrow or late
+    if (Date.now() - (notesSwept.get(brandName) || 0) > 5 * 60 * 1000) {
+      notesSwept.set(brandName, Date.now());
+      const { sweepNotifications } = await import("@/lib/notify");
+      try { sweepNotifications(); } catch { /* the next pass tries again */ }
     }
 
     // the work board follows the calendar and closes what is resolved, once an hour per brand
@@ -360,6 +396,7 @@ async function brandPass(brandName: string) {
 }
 
 const boardSynced = new Map<string, number>();
+const notesSwept = new Map<string, number>();
 
 export function kickWorker() {
   if (process.env.CIRCUIT_WORKER === "0") return;

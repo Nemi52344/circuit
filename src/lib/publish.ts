@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { getDb, getSetting, now, uploadDir, getFile } from "@/lib/db";
+import { getDb, getSetting, now, getFile, tryFilePath } from "@/lib/db";
 import { META_API_VERSION } from "@/lib/meta";
 import { uploadPublic } from "@/lib/supabase";
 import { publishAllowed } from "@/lib/signoff";
@@ -109,8 +109,8 @@ export function isVideo(fileId: string): boolean {
 async function pictureUrl(fileId: string): Promise<string> {
   const row = getFile(fileId);
   if (!row) throw new Error("That picture is not in the library any more");
-  const full = path.join(uploadDir(), row.path);
-  if (!fs.existsSync(full)) throw new Error("That picture has gone missing from disk");
+  const full = tryFilePath(row);
+  if (!fs.existsSync(full)) throw new Error("That picture is not stored in Circuit any more");
   const up = await uploadPublic("to-post", `${fileId}${path.extname(row.name) || ".jpg"}`, fs.readFileSync(full), row.mime || "image/jpeg");
   if (!up.ok) throw new Error(up.error);
   return up.url;

@@ -117,7 +117,7 @@ export default function IntelPage() {
       {view}
       <div className="page-head">
         <div>
-          <h2>Daily intel</h2>
+          <h1>Daily intel</h1>
           <p className="lede">
             Claude writes the briefing each morning. Circuit takes it from the folder, keeps it, and sends it on.
             Anything filed from it reaches <Link href="/knowledge" style={{ textDecoration: "underline" }}>what Circuit knows</Link>, so it shows up in the content plan too.

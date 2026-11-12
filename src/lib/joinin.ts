@@ -19,8 +19,11 @@ import { getDb, getSetting, newId, now } from "@/lib/db";
    X is better but still partial. Circuit reports what it found rather than implying it swept
    the platform, and every link is checked before it is shown. */
 
-export const PLATFORMS = ["LinkedIn", "X"] as const;
+export const PLATFORMS = ["LinkedIn", "X", "Instagram", "Facebook"] as const;
 export type Platform = (typeof PLATFORMS)[number];
+/* Search reaches LinkedIn thinly and X barely; Instagram and Facebook not at all. Those two
+   come in by pasting a link — which is how most posts worth answering are found anyway. */
+export const SEARCHABLE = ["LinkedIn", "X"] as const;
 
 export const STATUSES = ["new", "drafted", "joined", "ignored"] as const;
 export type Status = (typeof STATUSES)[number];
@@ -31,6 +34,8 @@ export type Conversation = {
   found_at: string; drafted_at: string | null; updated_at: string;
   /* Five ways to answer, each from a different angle. JSON in the database; parsed on read. */
   options: string; chosen: number; voice: string;
+  /* When the comment was left, for the day's count and the week's. */
+  joined_at?: string | null;
   /* The post as it was actually written, the platform's own embed of it, and its picture if it
      has one — the link to theirs, never a copy. */
   full_text: string; embed: string; image: string;
@@ -60,7 +65,7 @@ export const listConversations = (status?: string): Conversation[] =>
     ? getDb().prepare("SELECT * FROM conversations WHERE status = ? ORDER BY found_at DESC").all(status) as Conversation[]
     : getDb().prepare("SELECT * FROM conversations ORDER BY found_at DESC").all() as Conversation[];
 
-/* Only these two, and only a real post. A search will happily return a company page, a search
+/* Only these four, and only a real post. A search will happily return a company page, a search
    results page or an article about LinkedIn, and none of those are a conversation. */
 export function linkFault(url: string): string {
   let u: URL;
@@ -77,14 +82,25 @@ export function linkFault(url: string): string {
     if (!/\/status\/\d+/.test(u.pathname)) return "an X profile, not a post";
     return "";
   }
-  return "not LinkedIn or X";
+  if (h === "instagram.com") {
+    if (!/^\/(?:[\w.]+\/)?(p|reel|reels|tv)\/[\w-]+/.test(u.pathname)) return "an Instagram profile, not a post";
+    return "";
+  }
+  if (h === "facebook.com" || h === "m.facebook.com" || h === "web.facebook.com" || h === "fb.watch") {
+    if (h === "fb.watch") return u.pathname.length > 2 ? "" : "a Facebook page, not a post";
+    if (/\/(posts|videos|reel|permalink\.php|story\.php|photo|photo\.php|share\/p|share\/r|share\/v|watch)/.test(u.pathname)) return "";
+    return "a Facebook page, not a post";
+  }
+  return "not LinkedIn, X, Instagram or Facebook";
 }
 
 export const platformOf = (url: string): Platform | "" => {
   try {
     const h = new URL(url).hostname.replace(/^www\./, "").toLowerCase();
-    if (h.endsWith("linkedin.com")) return "LinkedIn";
+    if (h === "linkedin.com" || h.endsWith(".linkedin.com")) return "LinkedIn";
     if (h === "x.com" || h === "twitter.com") return "X";
+    if (h === "instagram.com") return "Instagram";
+    if (h === "facebook.com" || h.endsWith(".facebook.com") || h === "fb.watch") return "Facebook";
   } catch { /* handled by linkFault */ }
   return "";
 };
@@ -97,7 +113,13 @@ export const platformOf = (url: string): Platform | "" => {
 export function embedUrl(url: string): string {
   const id = postId(url);
   if (!id) return "";
-  return platformOf(url) === "LinkedIn"
+  const plat = platformOf(url);
+  if (plat === "Instagram") return `https://www.instagram.com/p/${id}/embed/captioned/`;
+  if (plat === "Facebook") {
+    const video = /\/(videos|reel|watch|share\/v|share\/r)/.test(url) || /fb\.watch/.test(url);
+    return `https://www.facebook.com/plugins/${video ? "video" : "post"}.php?href=${encodeURIComponent(url)}&show_text=true&width=500`;
+  }
+  return plat === "LinkedIn"
     ? `https://www.linkedin.com/embed/feed/update/urn:li:activity:${id}`
     : `https://platform.twitter.com/embed/Tweet.html?id=${id}&theme=light&dnt=true`;
 }
@@ -110,6 +132,9 @@ export function postId(url: string): string {
     if (platformOf(url) === "LinkedIn") {
       return (u.pathname.match(/-activity-(\d+)/) || u.pathname.match(/activity:(\d+)/) || [])[1] || "";
     }
+    /* Instagram's shortcode; Facebook has no single id shape, so its link stands for itself. */
+    if (platformOf(url) === "Instagram") return (u.pathname.match(/\/(?:p|reel|reels|tv)\/([\w-]+)/) || [])[1] || "";
+    if (platformOf(url) === "Facebook") return linkFault(url) ? "" : u.pathname;
     return (u.pathname.match(/\/status\/(\d+)/) || [])[1] || "";
   } catch { return ""; }
 }
@@ -135,6 +160,23 @@ export async function fetchPost(url: string): Promise<{ text: string; author: st
   const plat = platformOf(url);
 
   try {
+    /* Instagram's and Facebook's embeds are mostly drawn by script, so the words are often not
+       in the page at all. Read them when they are there; when not, the post's text can be
+       pasted in by hand. */
+    if (plat === "Instagram" || plat === "Facebook") {
+      const r = await fetchUrl(embedUrl(url), { timeoutMs: 12000, maxBytes: 800_000 });
+      const html = r.buffer.toString("utf8");
+      const cap = plat === "Instagram"
+        ? html.match(/class="Caption"[^>]*>([\s\S]*?)<div class="CaptionComments/) || html.match(/class="Caption"[^>]*>([\s\S]*?)<\/div>/)
+        : html.match(/data-testid="post_message"[^>]*>([\s\S]*?)<\/div>\s*<\/div>/) || html.match(/class="[^"]*userContent[^"]*"[^>]*>([\s\S]*?)<\/div>/);
+      const who = plat === "Instagram"
+        ? html.match(/class="(?:CaptionUsername|UsernameText)"[^>]*>([^<]{2,60})</)
+        : html.match(/<a[^>]+class="[^"]*profileLink[^"]*"[^>]*>([^<]{2,80})</);
+      let text = cap ? textFrom(cap[1]) : "";
+      if (who && text.startsWith(who[1].trim())) text = text.slice(who[1].trim().length).trim();
+      const og = html.match(/<meta[^>]+property="og:image"[^>]+content="([^"]+)"/);
+      return text ? { text, author: (who?.[1] || "").trim(), image: og ? unescapeHtml(og[1]) : "" } : null;
+    }
     if (plat === "X") {
       const r = await fetchUrl(`https://publish.twitter.com/oembed?url=${encodeURIComponent(url)}&omit_script=1`, { timeoutMs: 10000, maxBytes: 200_000 });
       const j = JSON.parse(r.buffer.toString("utf8")) as { html?: string; author_name?: string };
@@ -229,7 +271,7 @@ export async function findConversations(opts: { platforms?: string[]; topics?: s
   const { runChatGptJson } = await import("@/lib/chatgpt");
   const { getBrand } = await import("@/lib/brand");
   const brand = getBrand();
-  const platforms = (opts.platforms?.length ? opts.platforms : [...PLATFORMS]).filter((p) => (PLATFORMS as readonly string[]).includes(p));
+  const platforms = (opts.platforms?.length ? opts.platforms : [...SEARCHABLE]).filter((p) => (SEARCHABLE as readonly string[]).includes(p));
   if (!platforms.length) throw new Error("Say which platform to look on");
   const limit = Math.max(1, Math.min(25, opts.limit || 10));
 
@@ -489,9 +531,12 @@ export function saveConversation(c: Partial<Conversation> & { id: string }): Con
   if (c.status && !(STATUSES as readonly string[]).includes(c.status)) throw new Error("Unknown status");
   const sets: string[] = [];
   const vals: unknown[] = [];
-  for (const f of ["draft", "status", "why", "topic"] as const) {
-    if (c[f] !== undefined) { sets.push(`${f} = ?`); vals.push(c[f]); }
+  for (const f of ["draft", "status", "why", "topic", "full_text", "author"] as const) {
+    if (c[f] !== undefined) { sets.push(`${f} = ?`); vals.push(typeof c[f] === "string" ? (c[f] as string).slice(0, f === "full_text" ? 6000 : 300) : c[f]); }
   }
+  /* The moment it was left, for the day's goal; unset again if it is taken back. */
+  if (c.status === "joined") { sets.push("joined_at = COALESCE(joined_at, ?)"); vals.push(now()); }
+  else if (c.status) sets.push("joined_at = NULL");
   if (sets.length) db.prepare(`UPDATE conversations SET ${sets.join(", ")}, updated_at = ? WHERE id = ?`).run(...vals, now(), c.id);
   return db.prepare("SELECT * FROM conversations WHERE id = ?").get(c.id) as Conversation;
 }
@@ -500,6 +545,26 @@ export const removeConversation = (id: string) => {
   getDb().prepare("DELETE FROM conversations WHERE id = ?").run(id);
   return { deleted: id };
 };
+
+export const DAILY_GOAL = 5;
+
+/* The habit: comments left today against the day's goal, this week, and how many days in a row
+   the goal has been met. Days are counted in India time, since that is the team's day. */
+const istDay = (iso: string) => new Date(new Date(iso).getTime() + 5.5 * 3600_000).toISOString().slice(0, 10);
+export function engageStats(at = new Date().toISOString()) {
+  const rows = getDb().prepare("SELECT joined_at, platform FROM conversations WHERE status = 'joined' AND joined_at IS NOT NULL").all() as { joined_at: string; platform: string }[];
+  const byDay = new Map<string, number>();
+  for (const r of rows) { const d = istDay(r.joined_at); byDay.set(d, (byDay.get(d) || 0) + 1); }
+  const today = istDay(at);
+  const dayBack = (n: number) => istDay(new Date(new Date(at).getTime() - n * 86400_000).toISOString());
+  let streak = 0;
+  /* Today still counts toward the streak once met, but an unfinished today does not break it. */
+  for (let i = (byDay.get(today) || 0) >= DAILY_GOAL ? 0 : 1; i < 400 && (byDay.get(dayBack(i)) || 0) >= DAILY_GOAL; i++) streak++;
+  const week = Array.from({ length: 7 }, (_, i) => dayBack(6 - i)).map((d) => ({ day: d, n: byDay.get(d) || 0 }));
+  const byPlatform: Record<string, number> = {};
+  for (const r of rows) if (istDay(r.joined_at) >= dayBack(6)) byPlatform[r.platform] = (byPlatform[r.platform] || 0) + 1;
+  return { goal: DAILY_GOAL, today: byDay.get(today) || 0, week, week_total: week.reduce((a, w) => a + w.n, 0), streak, by_platform: byPlatform };
+}
 
 export function joinSummary() {
   const db = getDb();

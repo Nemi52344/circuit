@@ -77,7 +77,7 @@ export default function ListeningPage() {
       {view}
       <div className="page-head">
         <div>
-          <h2>Listening</h2>
+          <h1>Listening</h1>
           <p className="lede">
             Comments on our own posts, and a reply drafted for each one in our voice.
             Circuit writes them; you send them. Nothing here is posted on its own.
@@ -199,7 +199,7 @@ export default function ListeningPage() {
       <section className="panel stack">
         <div className="panel-head">
           <h3>Commenting on other people&rsquo;s posts</h3>
-          <Link className="btn small" href="/comments">Open Comments</Link>
+          <Link className="btn small" href="/engage">Open the Engager</Link>
         </div>
         <p className="small muted" style={{ margin: 0 }}>
           Posts on LinkedIn and X where a comment from you would belong, each with five ways to answer it,

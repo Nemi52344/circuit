@@ -1,15 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
-import { DATA_DIR, uploadDir, getDb, getSetting, setSetting, now } from "@/lib/db";
+import { DATA_DIR, getDb, getSetting, setSetting, now } from "@/lib/db";
 
-/* A copy of everything, made by the app itself once a day. The database is copied properly
-   (sqlite's own backup, safe while the app is writing); the uploaded pictures are hard-linked
-   into the backup folder, which costs no disk space but survives a file being deleted by hand.
-   Seven days are kept. This protects against mistakes, not against the disk dying: for that,
-   the whole data folder needs to go somewhere else. */
+/* A copy of everything, made by the app itself once a day: sqlite's own backup, safe while the
+   app is writing. Since the files moved into the database, that one copy holds every picture,
+   video and PDF as well — about half a gigabyte a day — so three days are kept here. The copy
+   in Turso, a minute behind, is the one that survives this Mac. */
 
 export const BACKUP_DIR = path.join(DATA_DIR, "backups");
-const KEEP = 7;
+const KEEP = 3;
 
 export type BackupRun = { at: string; file: string; db_bytes: number; pictures: number; seconds: number };
 
@@ -20,20 +19,6 @@ export function lastBackup(): BackupRun | null {
 export function backupDue(hours = 20) {
   const last = lastBackup();
   return !last || Date.now() - new Date(last.at).getTime() > hours * 3600000;
-}
-
-/* Hard-links every upload into backups/uploads. Same bytes on disk, a second name for them. */
-function mirrorUploads() {
-  const dest = path.join(BACKUP_DIR, "uploads");
-  fs.mkdirSync(dest, { recursive: true });
-  let linked = 0;
-  for (const name of fs.existsSync(uploadDir()) ? fs.readdirSync(uploadDir()) : []) {
-    const from = path.join(uploadDir(), name);
-    const to = path.join(dest, name);
-    if (fs.existsSync(to)) continue;
-    try { fs.linkSync(from, to); linked++; } catch { try { fs.copyFileSync(from, to); linked++; } catch { /* skip unreadable */ } }
-  }
-  return linked;
 }
 
 function prune() {
@@ -54,7 +39,7 @@ export async function runBackup(): Promise<BackupRun> {
   const stamp = new Date().toISOString().slice(0, 16).replace("T", "-").replace(":", "");
   const file = path.join(BACKUP_DIR, `circuit-${stamp}.db`);
   await getDb().backup(file);
-  const pictures = mirrorUploads();
+  const pictures = (getDb().prepare("SELECT COUNT(*) n FROM files").get() as { n: number }).n;
   prune();
   const run: BackupRun = {
     at: now(),

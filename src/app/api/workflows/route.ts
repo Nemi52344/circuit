@@ -1,4 +1,4 @@
-import { handle, ok, bad, readJson } from "@/lib/http";
+import { handleCan, handle, ok, bad, readJson } from "@/lib/http";
 import { listWorkflows, saveWorkflow, deleteWorkflow, runWorkflow, resumeWorkflow, recentRuns, runsFor, seedWorkflows, ACTIONS, type Step } from "@/lib/workflows";
 import { BRANCH_TESTS, type Flow } from "@/lib/flow";
 import { listAgents } from "@/lib/agents";
@@ -13,7 +13,7 @@ export const GET = handle(async (req) => {
   return ok({ workflows: listWorkflows(), agents: listAgents(), actions: ACTIONS, tests: BRANCH_TESTS, runs: recentRuns() });
 });
 
-export const POST = handle(async (req) => {
+export const POST = handleCan("manage", async (req) => {
   const b = await readJson<{ action?: string; id?: string; run_id?: string; name?: string; purpose?: string; steps?: Step[] | Flow; trigger?: string; at_time?: string; weekday?: number | null; active?: number; input?: Record<string, unknown> }>(req);
   if (b.action === "run") {
     if (!b.id) return bad("id required");
@@ -30,7 +30,7 @@ export const POST = handle(async (req) => {
   return ok(saveWorkflow({ ...b, name: b.name.trim(), steps: JSON.stringify(b.steps ?? []) }));
 });
 
-export const DELETE = handle(async (req) => {
+export const DELETE = handleCan("manage", async (req) => {
   const id = new URL(req.url).searchParams.get("id");
   if (!id) return bad("id required");
   deleteWorkflow(id);

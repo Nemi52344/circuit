@@ -212,7 +212,7 @@ export default function CalendarPage() {
       <div className="page-head cal-head">
         <div className="month-nav">
           <button className="btn small" type="button" onClick={() => setMonth(shiftMonth(month, -1))} aria-label="Previous month">‹</button>
-          <h2>{month.toLocaleDateString("en-IN", { month: "long", year: "numeric" })}</h2>
+          <h1>{month.toLocaleDateString("en-IN", { month: "long", year: "numeric" })}</h1>
           <button className="btn small" type="button" onClick={() => setMonth(shiftMonth(month, 1))} aria-label="Next month">›</button>
           {mk !== monthKey(new Date()) ? <button className="btn small ghost" type="button" onClick={() => { const d = new Date(); setMonth(new Date(d.getFullYear(), d.getMonth(), 1)); }}>This month</button> : null}
         </div>

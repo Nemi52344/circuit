@@ -44,7 +44,7 @@ export default function ReviewPage() {
       <div className="page-head">
         <div>
           <p className="small muted" style={{ margin: 0 }}>Review for {r.approver.name}{r.approver.role ? `, ${r.approver.role}` : ""}</p>
-          <h2>{r.post.topic}</h2>
+          <h1>{r.post.topic}</h1>
           <p className="lede">{niceDate(r.post.date)} at {r.post.time} · {FORMAT_LABEL[r.post.format] || r.post.format} · {r.post.platforms.join(", ")}</p>
         </div>
       </div>

@@ -345,7 +345,7 @@ export function ensureDefaultRoot() {
   for (const d of ["Ola Electric", "Ather", "TVS", "Bajaj", "Revolt", "Ultraviolette", "BNC Motors (own)"]) fs.mkdirSync(path.join(DEFAULT_ROOT, d), { recursive: true });
   fs.writeFileSync(
     path.join(DEFAULT_ROOT, "README.txt"),
-    "Circuit inspiration root folder.\n\nOne subfolder per company. Drop images (jpg, png, webp, gif) inside.\nThe Inspiration screen lists every folder here; Import copies the images into data/uploads and records the folder name as the competitor.\nYou can point Circuit at a different root folder from the Inspiration screen.\n",
+    "Circuit inspiration root folder.\n\nOne subfolder per company. Drop images (jpg, png, webp, gif) inside.\nThe Inspiration screen lists every folder here; Import stores the images in Circuit's database and records the folder name as the competitor.\nYou can point Circuit at a different root folder from the Inspiration screen.\n",
   );
 }
 export type FolderImage = { name: string; path: string; size: number; mtime: string; imported: boolean };

@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { migrate } from "@/lib/migrate";
+import { CHUNK, chunkCount, chunkSpans } from "@/lib/filechunks";
 
 export const DATA_DIR = path.join(process.cwd(), "data");
 
@@ -686,7 +687,136 @@ function openBrandDb(slug: string, dir: string): Database.Database {
   db.exec(SCHEMA);
   const ran = migrate(db);
   if (ran.length) console.log(`[db] ${slug}: applied ${ran.length} migration(s): ${ran.map((m) => `${m.id} ${m.name}`).join(", ")}`);
+  bringFilesIn(db, slug, path.join(root, "uploads"));
   return db;
+}
+
+/* ---- the files themselves, kept in the database ----
+
+   Every picture, video and PDF is stored in file_chunks, cut into CHUNK-sized pieces (see
+   lib/filechunks.ts). The database is the record; the uploads folder is only a cache of it,
+   rebuilt by filePath() whenever a tool that needs a real file — ffmpeg, Chrome, pdftotext,
+   sips — asks for one, and safe to delete at any time. */
+
+const chunkSha = (b: Buffer): string => createHash("sha1").update(b).digest("hex");
+
+/* A file's bytes into the database, replacing any it had. */
+export function putFileBytes(id: string, buf: Buffer, db = getDb()): void {
+  const ins = db.prepare("INSERT INTO file_chunks (file_id, n, size, sha, data) VALUES (?, ?, ?, ?, ?)");
+  db.transaction(() => {
+    db.prepare("DELETE FROM file_chunks WHERE file_id = ?").run(id);
+    for (let n = 0; n < chunkCount(buf.length); n++) {
+      const part = Buffer.from(buf.subarray(n * CHUNK, (n + 1) * CHUNK));
+      ins.run(id, n, part.length, chunkSha(part), part);
+    }
+  })();
+}
+
+/* The same from a file on disk, read a chunk at a time, so a long video never has to be held
+   in memory whole. Returns the number of bytes stored. */
+export function putFileFromPath(id: string, src: string, db = getDb()): number {
+  const ins = db.prepare("INSERT INTO file_chunks (file_id, n, size, sha, data) VALUES (?, ?, ?, ?, ?)");
+  const fd = fs.openSync(src, "r");
+  let total = 0;
+  try {
+    db.transaction(() => {
+      db.prepare("DELETE FROM file_chunks WHERE file_id = ?").run(id);
+      const buf = Buffer.alloc(CHUNK);
+      for (let n = 0; ; n++) {
+        const got = fs.readSync(fd, buf, 0, CHUNK, null);
+        if (got === 0 && n > 0) break;
+        const part = Buffer.from(buf.subarray(0, got));
+        ins.run(id, n, part.length, chunkSha(part), part);
+        total += got;
+        if (got < CHUNK) break;
+      }
+    })();
+  } finally {
+    fs.closeSync(fd);
+  }
+  return total;
+}
+
+export const hasFileBytes = (id: string, db = getDb()): boolean =>
+  Boolean(db.prepare("SELECT 1 FROM file_chunks WHERE file_id = ? AND data IS NOT NULL LIMIT 1").get(id));
+
+/* The whole file, from the database. */
+export function fileBytes(id: string): Buffer | null {
+  const rows = getDb().prepare("SELECT data FROM file_chunks WHERE file_id = ? ORDER BY n").all(id) as { data: Buffer | null }[];
+  if (!rows.length || rows.some((r) => !r.data)) return null;
+  return Buffer.concat(rows.map((r) => r.data as Buffer));
+}
+
+/* Bytes start..end inclusive, read from only the chunks that hold them. */
+export function fileRange(id: string, start: number, end: number): Buffer {
+  const spans = chunkSpans(start, end);
+  const get = getDb().prepare("SELECT data FROM file_chunks WHERE file_id = ? AND n = ?");
+  return Buffer.concat(spans.map((s) => {
+    const r = get.get(id, s.n) as { data: Buffer | null } | undefined;
+    return r?.data ? r.data.subarray(s.from, s.to) : Buffer.alloc(0);
+  }));
+}
+
+/* A real path for a tool that needs one: the cached copy in the uploads folder, written out
+   from the database when it is missing or not the size it should be. */
+export function filePath(f: FileRow | string): string {
+  const row = typeof f === "string" ? getFile(f) : f;
+  if (!row) throw new Error("That file is not in Circuit");
+  const abs = path.join(uploadDir(), row.path);
+  try { if (fs.statSync(abs).size === row.size) return abs; } catch { /* not cached yet */ }
+  const db = getDb();
+  const rows = db.prepare("SELECT n FROM file_chunks WHERE file_id = ? AND data IS NOT NULL ORDER BY n").all(row.id) as { n: number }[];
+  if (!rows.length) {
+    /* Not in the database yet but here on disk — stored now rather than lost track of. */
+    if (fs.existsSync(abs)) { putFileFromPath(row.id, abs, db); return abs; }
+    throw new Error(`${row.name} is not stored in Circuit`);
+  }
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  const tmp = `${abs}.${process.pid}.part`;
+  const fd = fs.openSync(tmp, "w");
+  try {
+    const get = db.prepare("SELECT data FROM file_chunks WHERE file_id = ? AND n = ?");
+    for (const { n } of rows) fs.writeSync(fd, (get.get(row.id, n) as { data: Buffer }).data);
+  } finally {
+    fs.closeSync(fd);
+  }
+  fs.renameSync(tmp, abs);
+  return abs;
+}
+
+/* The same, for callers that check for a missing file themselves: "" when it cannot be had. */
+export function tryFilePath(f: FileRow | string | undefined | null): string {
+  if (!f) return "";
+  try { return filePath(f); } catch { return ""; }
+}
+
+/* Once per brand, when its database opens: every file that is only on disk is stored in the
+   database, and anything in the uploads folder that no row knows about is moved aside into
+   backups rather than left looking like data. After that this finds nothing to do. */
+function bringFilesIn(db: Database.Database, slug: string, uploads: string): void {
+  const missing = db.prepare(`SELECT id, name, path, size FROM files f
+    WHERE NOT EXISTS (SELECT 1 FROM file_chunks c WHERE c.file_id = f.id)`).all() as { id: string; name: string; path: string; size: number }[];
+  let moved = 0, absent = 0;
+  for (const f of missing) {
+    const abs = path.join(uploads, f.path);
+    if (!fs.existsSync(abs)) { absent++; continue; }
+    const size = putFileFromPath(f.id, abs, db);
+    if (size !== f.size) db.prepare("UPDATE files SET size = ? WHERE id = ?").run(size, f.id);
+    moved++;
+  }
+  if (moved || absent) console.log(`[db] ${slug}: ${moved} file(s) stored in the database${absent ? ` · ${absent} listed but missing from disk` : ""}`);
+  if (!moved && !fs.existsSync(uploads)) return;
+  const done = db.prepare("SELECT value FROM settings WHERE key = 'files_in_db_at'").get() as { value: string } | undefined;
+  if (done) return;
+  const known = new Set((db.prepare("SELECT path FROM files").all() as { path: string }[]).map((r) => r.path));
+  const strays = fs.existsSync(uploads) ? fs.readdirSync(uploads).filter((n) => !n.startsWith(".") && !known.has(n) && !n.endsWith(".part")) : [];
+  if (strays.length) {
+    const aside = path.join(DATA_DIR, "backups", `uploads-not-in-circuit-${slug}-${new Date().toISOString().slice(0, 10)}`);
+    fs.mkdirSync(aside, { recursive: true });
+    for (const n of strays) fs.renameSync(path.join(uploads, n), path.join(aside, n));
+    console.log(`[db] ${slug}: ${strays.length} file(s) in uploads with no row in Circuit moved to ${path.relative(DATA_DIR, aside)}`);
+  }
+  db.prepare("INSERT INTO settings (key, value) VALUES ('files_in_db_at', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(new Date().toISOString());
 }
 
 export function getDb(): Database.Database {
@@ -796,12 +926,15 @@ export function saveFileBuffer(buf: Buffer, name: string, mime: string, kind = "
   const id = newId();
   const ext = SAFE_EXT[mime] || (name.includes(".") ? name.split(".").pop()!.toLowerCase().replace(/[^a-z0-9]/g, "") : "bin");
   const rel = `${id}.${ext}`;
-  fs.mkdirSync(uploadDir(), { recursive: true });
-  fs.writeFileSync(path.join(uploadDir(), rel), buf);
   const row: FileRow = { id, name, mime, size: buf.length, path: rel, kind, created_at: now() };
-  getDb()
-    .prepare("INSERT INTO files (id, name, mime, size, path, kind, created_at, sha256) VALUES (@id, @name, @mime, @size, @path, @kind, @created_at, @sha256)")
-    .run({ ...row, sha256: sha });
+  const db = getDb();
+  db.transaction(() => {
+    db.prepare("INSERT INTO files (id, name, mime, size, path, kind, created_at, sha256) VALUES (@id, @name, @mime, @size, @path, @kind, @created_at, @sha256)")
+      .run({ ...row, sha256: sha });
+    putFileBytes(id, buf, db);
+  })();
+  /* The cache copy, so the next tool that wants a path does not have to write it out. */
+  try { fs.mkdirSync(uploadDir(), { recursive: true }); fs.writeFileSync(path.join(uploadDir(), rel), buf); } catch { /* the database has it */ }
   return { ...row, sha256: sha };
 }
 
@@ -812,7 +945,7 @@ export function getFile(id: string): FileRow | undefined {
 export function readFileBase64(id: string): { mime: string; data: string } | null {
   const f = getFile(id);
   if (!f) return null;
-  const buf = fs.readFileSync(path.join(uploadDir(), f.path));
+  const buf = fileBytes(id) || fs.readFileSync(filePath(f));
   return { mime: f.mime, data: buf.toString("base64") };
 }
 
@@ -852,15 +985,12 @@ export function deleteFile(id: string): DeleteFileResult {
   const f = getFile(id);
   if (!f) return "missing";
   if (fileOwners(id).length) return "in_use";
-  const full = path.join(uploadDir(), f.path);
-  if (fs.existsSync(full)) {
-    try {
-      fs.unlinkSync(full);
-    } catch {
-      // the row stays so the file is not lost track of, and the caller is told
-      return "failed";
-    }
-  }
-  getDb().prepare("DELETE FROM files WHERE id = ?").run(id);
+  const db = getDb();
+  db.transaction(() => {
+    db.prepare("DELETE FROM file_chunks WHERE file_id = ?").run(id);
+    db.prepare("DELETE FROM files WHERE id = ?").run(id);
+  })();
+  /* The cached copy goes too; if it cannot, it is only a cache. */
+  try { fs.rmSync(path.join(uploadDir(), f.path), { force: true }); } catch { /* harmless */ }
   return "deleted";
 }

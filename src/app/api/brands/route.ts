@@ -26,7 +26,7 @@ export const POST = handleCan("manage", async (req) => {
 });
 
 /* Switching is an everyday act, so anyone signed in may do it. */
-export const PATCH = handle(async (req) => {
+export const PATCH = handleCan("manage", async (req) => {
   const b = await readJson<{ slug?: string }>(req);
   if (!b.slug) return bad("Which brand?");
   try {

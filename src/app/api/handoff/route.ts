@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { handle, ok, readJson } from "@/lib/http";
+import { handleCan, handle, ok, readJson } from "@/lib/http";
 import { getDb, setSetting } from "@/lib/db";
 import { handoffSecret, dueForHandoff, HANDOFF_PLATFORMS } from "@/lib/handoff";
 
@@ -33,7 +33,7 @@ export const GET = handle(async () => {
   });
 });
 
-export const POST = handle(async (req) => {
+export const POST = handleCan("manage", async (req) => {
   const b = await readJson<{ action?: string }>(req);
 
   if (b.action === "off") {

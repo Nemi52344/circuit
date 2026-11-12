@@ -439,6 +439,119 @@ export const MIGRATIONS: Migration[] = [
     name: "stock usage per month",
     up: (db) => addColumn(db, "stock", "per_month", "REAL NOT NULL DEFAULT 0"),
   },
+  {
+    /* What has been sent to the online copy, row by row, as a hash of the row when it went —
+       so a push sends only what changed since. Never sent itself (mirrorplan.ts). */
+    id: 23,
+    name: "online copy bookkeeping",
+    up: (db) => db.exec(`CREATE TABLE IF NOT EXISTS mirror_rows (
+      tbl TEXT NOT NULL, k TEXT NOT NULL, h TEXT NOT NULL, PRIMARY KEY (tbl, k))`),
+  },
+  {
+    /* Work coming in and going to the right person (lib/allocate.ts, lib/inbox.ts), and the
+       pop-ups that tell them. A task now belongs to an account rather than to a typed name,
+       says what kind of work it is, and remembers the request it came from and why it went to
+       whoever has it. */
+    id: 24,
+    name: "work inbox, allocation and notifications",
+    up: (db) => {
+      db.exec(`CREATE TABLE IF NOT EXISTS requests (
+        id TEXT PRIMARY KEY, source TEXT NOT NULL DEFAULT 'paste', sender TEXT NOT NULL DEFAULT '',
+        subject TEXT NOT NULL DEFAULT '', body TEXT NOT NULL, created_by TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'new', error TEXT NOT NULL DEFAULT '', task_ids TEXT NOT NULL DEFAULT '[]',
+        external_id TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`);
+      db.exec("CREATE INDEX IF NOT EXISTS idx_requests_created ON requests(created_at)");
+      db.exec(`CREATE TABLE IF NOT EXISTS work_profiles (
+        user_id TEXT PRIMARY KEY, takes_work INTEGER NOT NULL DEFAULT 1, kinds TEXT NOT NULL DEFAULT '[]',
+        notes TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL)`);
+      db.exec(`CREATE TABLE IF NOT EXISTS assign_moves (
+        id TEXT PRIMARY KEY, task_id TEXT NOT NULL, kind TEXT NOT NULL, from_user TEXT NOT NULL DEFAULT '',
+        to_user TEXT NOT NULL, by_user TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL)`);
+      db.exec(`CREATE TABLE IF NOT EXISTS notifications (
+        id TEXT PRIMARY KEY, user_id TEXT NOT NULL, kind TEXT NOT NULL, title TEXT NOT NULL,
+        body TEXT NOT NULL DEFAULT '', link TEXT NOT NULL DEFAULT '', dedupe TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL, read_at TEXT NOT NULL DEFAULT '')`);
+      db.exec("CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, read_at, created_at)");
+      db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_notifications_dedupe ON notifications(user_id, dedupe) WHERE dedupe <> ''");
+      addColumn(db, "tasks", "assignee_id", "TEXT NOT NULL DEFAULT ''");
+      addColumn(db, "tasks", "kind", "TEXT NOT NULL DEFAULT ''");
+      addColumn(db, "tasks", "request_id", "TEXT NOT NULL DEFAULT ''");
+      addColumn(db, "tasks", "assign_reason", "TEXT NOT NULL DEFAULT ''");
+      addColumn(db, "tasks", "priority", "TEXT NOT NULL DEFAULT 'normal'");
+    },
+  },
+  {
+    /* The video studio (lib/videoedit.ts): footage in, a finished reel out. One row per edit,
+       carrying its options, ChatGPT's plan, where it has got to, and what it made. */
+    id: 25,
+    name: "video studio jobs",
+    up: (db) => db.exec(`CREATE TABLE IF NOT EXISTS video_jobs (
+      id TEXT PRIMARY KEY, source_file_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'queued',
+      step TEXT NOT NULL DEFAULT '', options TEXT NOT NULL DEFAULT '{}', plan TEXT NOT NULL DEFAULT '{}',
+      output_file_id TEXT NOT NULL DEFAULT '', post_id TEXT NOT NULL DEFAULT '', error TEXT NOT NULL DEFAULT '',
+      created_by TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`),
+  },
+  {
+    /* Raw collateral brought in from a folder (lib/collateral.ts): which file on disk became
+       which file here, so a watched folder is read once, not every ten minutes — and a shoot
+       of large videos is not re-hashed on every look. */
+    id: 26,
+    name: "collateral folder imports",
+    up: (db) => db.exec(`CREATE TABLE IF NOT EXISTS collateral_seen (
+      path TEXT PRIMARY KEY, size INTEGER NOT NULL, mtime REAL NOT NULL, file_id TEXT NOT NULL DEFAULT '', seen_at TEXT NOT NULL)`),
+  },
+  /* 27: the AI subscriptions — what we pay for, every month, on purpose. The card statement says
+     what was charged; this says what we meant to buy, so the two can be held side by side. */
+  {
+    id: 27,
+    name: "ai subscriptions",
+    up: (db) => db.exec(`CREATE TABLE IF NOT EXISTS subscriptions (
+      id TEXT PRIMARY KEY, tool TEXT NOT NULL, plan TEXT NOT NULL DEFAULT '', monthly_cost INTEGER NOT NULL DEFAULT 0,
+      billing_day INTEGER NOT NULL DEFAULT 0, card_name TEXT NOT NULL DEFAULT '', used_for TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'active', starts_on TEXT NOT NULL DEFAULT '', ends_on TEXT NOT NULL DEFAULT '',
+      notes TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL)`),
+  },
+  /* 28: subscriptions as the team keeps them on their sheet — who is responsible, the price in
+     the currency it is charged in, whose card pays, how often it renews (monthly, yearly, every
+     three years) and what kind of charge it is. The monthly figure is worked out from the price
+     and how often it renews, so a three-year domain is a few rupees a month, not ₹3,256 once. */
+  {
+    id: 28,
+    name: "subscription details",
+    up: (db) => {
+      addColumn(db, "subscriptions", "owner", "TEXT NOT NULL DEFAULT ''");
+      addColumn(db, "subscriptions", "currency", "TEXT NOT NULL DEFAULT 'INR'");
+      addColumn(db, "subscriptions", "foreign_cost", "INTEGER NOT NULL DEFAULT 0");
+      addColumn(db, "subscriptions", "period_cost", "INTEGER NOT NULL DEFAULT 0");
+      addColumn(db, "subscriptions", "cycle", "TEXT NOT NULL DEFAULT 'monthly'");
+      addColumn(db, "subscriptions", "kind", "TEXT NOT NULL DEFAULT 'Subscription'");
+      addColumn(db, "subscriptions", "card_holder", "TEXT NOT NULL DEFAULT ''");
+      addColumn(db, "subscriptions", "last_paid", "TEXT NOT NULL DEFAULT ''");
+      db.exec("UPDATE subscriptions SET period_cost = monthly_cost WHERE period_cost = 0");
+    },
+  },
+  /* 29: when a comment was left, so the Engager can count the day against its goal. Comments
+     already marked as left take the time they were last touched. */
+  {
+    id: 29,
+    name: "comment left at",
+    up: (db) => {
+      addColumn(db, "conversations", "joined_at", "TEXT");
+      db.exec("UPDATE conversations SET joined_at = updated_at WHERE status = 'joined' AND joined_at IS NULL");
+    },
+  },
+  /* 30: the files themselves, in the database. Every picture, video and PDF is kept here in
+     chunks (lib/filechunks.ts), each with its own fingerprint so the online copy can tell what
+     changed without reading the bytes. The uploads folder becomes a cache, rebuilt from these
+     rows whenever a tool needs a real file on disk. `data` may be empty in a copy restored
+     only to be compared; the database itself always holds the bytes. */
+  {
+    id: 30,
+    name: "files kept in the database",
+    up: (db) => db.exec(`CREATE TABLE IF NOT EXISTS file_chunks (
+      file_id TEXT NOT NULL, n INTEGER NOT NULL, size INTEGER NOT NULL, sha TEXT NOT NULL, data BLOB,
+      PRIMARY KEY (file_id, n))`),
+  },
 ];
 
 export type Applied = { id: number; name: string; at: string };

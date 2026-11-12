@@ -98,7 +98,7 @@ export default function SlotsPage() {
       {view}
       <div className="page-head">
         <div>
-          <h2>In hand</h2>
+          <h1>In hand</h1>
           <p className="lede">
             {queue.length
               ? <>{queue.length} post{queue.length === 1 ? " has" : "s have"} four or more steps behind {queue.length === 1 ? "it" : "them"}{needsYou ? <>, {needsYou} waiting on you</> : ", none waiting on you right now"}.</>

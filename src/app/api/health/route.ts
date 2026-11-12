@@ -1,4 +1,4 @@
-import { handle, ok, readJson } from "@/lib/http";
+import { handleCan, handle, ok, readJson } from "@/lib/http";
 import { healthReport } from "@/lib/health";
 import { runBackup, backupList } from "@/lib/backup";
 import { startWorker } from "@/lib/worker";
@@ -12,7 +12,7 @@ export const GET = handle(async () => {
 });
 
 /* "Back up now" from Settings. Everything else on this page only reads. */
-export const POST = handle(async (req) => {
+export const POST = handleCan("manage", async (req) => {
   const b = await readJson<{ action?: string }>(req);
   if (b.action === "backup") {
     const run = await runBackup();

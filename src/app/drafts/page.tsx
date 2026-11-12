@@ -100,7 +100,7 @@ export default function DraftsPage() {
       {view}
       <div className="page-head">
         <div>
-          <h2>Drafts</h2>
+          <h1>Drafts</h1>
           <p className="lede">Write blogs, emails, WhatsApp messages and ad copy, then export them.</p>
         </div>
         <div className="tabs">{TYPES.map((t) => <button key={t.key} type="button" className={type === t.key ? "active" : ""} onClick={() => setType(t.key)}>{t.label}</button>)}</div>

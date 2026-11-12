@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { getDb, newId, now, saveFileBuffer, getFile, uploadDir } from "@/lib/db";
+import { getDb, newId, now, saveFileBuffer, getFile, tryFilePath } from "@/lib/db";
 import { chromePath } from "@/lib/intelpdf";
 
 const run = promisify(execFile);
@@ -47,6 +47,20 @@ export const TEMPLATES: { id: Template; group: Group; name: string; what: string
   { id: "crew", group: "Crew", name: "From the floor", what: "A line from the team, over a photograph of the work.", needs: ["headline"] },
 ];
 
+/* The look a poster is printed in. The templates decide what goes where; the theme decides the
+   ground, the colours and the small marks around the edge, and brings the brand line that
+   belongs with it. NEMI is Brand Book v2.0: one accent (Signal Emerald), Space Grotesk for the
+   voice and IBM Plex Mono for the data, on either of its two grounds. */
+export type ThemeKey = "nemi" | "nemi-light" | "bnc";
+
+export const THEMES: { id: ThemeKey; name: string; what: string; ground: string; ink: string; accent: string; mark: string; mark_tail: string; site: string }[] = [
+  { id: "nemi", name: "NEMI Black", what: "Black ground, emerald wash, oat type. For covers and statements.", ground: "#070707", ink: "#ECE7DD", accent: "#10A37E", mark: "NEMI", mark_tail: "LMM", site: "nemilmm.com" },
+  { id: "nemi-light", name: "NEMI Bone", what: "Bone white ground, near-black type, emerald accent. For facts read up close.", ground: "#FEFEFE", ink: "#070707", accent: "#10A37E", mark: "NEMI", mark_tail: "LMM", site: "nemilmm.com" },
+  { id: "bnc", name: "BNC", what: "The original: near-black with olive green.", ground: "#0A0B0A", ink: "#F4F6F2", accent: "#A8BF6A", mark: "BNC", mark_tail: "", site: "bncmotors.in" },
+];
+export const DEFAULT_THEME: ThemeKey = "nemi";
+export const themeOf = (key?: string | null) => THEMES.find((t) => t.id === key) || THEMES.find((t) => t.id === DEFAULT_THEME)!;
+
 export const SIZES = {
   post: { w: 1080, h: 1350, label: "Portrait post 4:5" },
   square: { w: 1080, h: 1080, label: "Square 1:1" },
@@ -60,6 +74,7 @@ export type SizeKey = keyof typeof SIZES;
 export type PosterSpec = {
   template: Template;
   size: SizeKey;
+  theme?: ThemeKey;
   eyebrow?: string;
   number?: string;
   unit?: string;
@@ -72,6 +87,8 @@ export type PosterSpec = {
   /* The accented half of the wordmark. A product poster says "BNC Challenger"; a job ad or a
      welcome card says "BNC Motors", because neither is about the Challenger. */
   mark_tail?: string;
+  /* The address in the bottom left. Each theme brings its own. */
+  site?: string;
   footnote?: string;
   source?: string;
   /* Crew templates */
@@ -104,20 +121,48 @@ function photoPath(fileId?: string | null): string | null {
   if (!fileId) return null;
   const row = getFile(fileId);
   if (!row) return null;
-  const full = path.join(uploadDir(), row.path);
+  const full = tryFilePath(row);
   return fs.existsSync(full) ? full : null;
 }
 
-export function posterHtml(spec: PosterSpec): string {
+const fileUri = (abs: string) => `file://${abs.split("/").map(encodeURIComponent).join("/")}`;
+
+/* The NEMI mark, carried inside the page. It is drawn as a mask so it takes the accent colour,
+   and Chrome will not use a file:// picture as a mask — so the few bytes travel with the HTML,
+   which also makes the preview and the print the same. */
+let logoData: string | null = null;
+function nemiLogo(): string {
+  if (logoData === null) {
+    try { logoData = `data:image/png;base64,${fs.readFileSync(path.join(process.cwd(), "public", "nemi-logo.png")).toString("base64")}`; }
+    catch { logoData = ""; }
+  }
+  return logoData;
+}
+
+/* `web` is the preview inside Circuit: the page is served over http, where a file:// picture is
+   refused, so the photograph is asked for by URL instead. The printed poster keeps the path,
+   because headless Chrome is not signed in. */
+export function posterHtml(spec: PosterSpec, opts: { web?: boolean } = {}): string {
   const { w, h } = SIZES[spec.size] || SIZES.post;
-  const photo = photoPath(spec.photo_file_id);
+  const photo = opts.web ? (spec.photo_file_id && getFile(spec.photo_file_id) ? spec.photo_file_id : null) : photoPath(spec.photo_file_id);
+
+  const theme = themeOf(spec.theme);
+  const nemi = theme.id !== "bnc";
+  const light = theme.id === "nemi-light";
+  /* The ink as r,g,b so the quieter tiers are the same colour at a lower strength, on any ground. */
+  const ink = light ? "7,7,7" : nemi ? "236,231,221" : "244,246,242";
+  const accent = theme.accent;
+  /* Signal Emerald is a large-type colour on bone white; small mono labels drop to Deep Emerald
+     so they are still read at a glance. */
+  const accentText = light ? "#0A4938" : accent;
+  const logo = nemi ? nemiLogo() : "";
   const facts = (spec.facts || []).filter(Boolean).slice(0, 3);
   /* Proportional to the frame, so the same template holds at 1:1, 4:5 and 9:16 rather than
      needing a hand-tuned copy for each. */
   const u = h / 1350;
   const px = (n: number) => `${Math.round(n * u)}px`;
 
-  const src = photo ? `file://${photo.split("/").map(encodeURIComponent).join("/")}` : "";
+  const src = !photo ? "" : opts.web ? `/api/files/${encodeURIComponent(photo)}` : fileUri(photo);
   /* Three jobs, three framings. A product cut-out floats in the middle band; a carousel cover
      pushes it off the right edge so the words keep the left; a person is cropped round and
      sits inside the text block, because a face floated behind type is a stock photo. */
@@ -139,6 +184,18 @@ export function posterHtml(spec: PosterSpec): string {
 
   const CREW = ["welcome", "milestone", "hiring", "crew"];
   const T = spec.template;
+
+  /* The wordmark. A theme brings its own; one typed in replaces it whole, so "BNC" on a NEMI
+     poster does not inherit NEMI's second word. */
+  const typed = (spec.mark || "").trim();
+  const mark = typed || theme.mark;
+  const tail = (spec.mark_tail || "").trim()
+    || (typed && typed.toLowerCase() !== theme.mark.toLowerCase() ? ""
+      : theme.id === "bnc" ? (CREW.includes(T) ? "Motors" : "Challenger") : theme.mark_tail);
+  const site = (spec.site || "").trim() || theme.site;
+  /* NEMI picks one corner treatment per poster: the emerald wash where the poster is a
+     statement, the blueprint grid where it is a figure to be read. */
+  const blueprint = nemi && (T === "fact" || T === "point");
   const body =
     T === "load"
       ? `<div class="claim">${eyebrow}${num()}${spec.headline ? `<div class="under">${escKeep(spec.headline)}</div>` : ""}</div>`
@@ -212,28 +269,43 @@ export function posterHtml(spec: PosterSpec): string {
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  body { width:${w}px; height:${h}px; position:relative; overflow:hidden; background:#0A0B0A;
-    font-family:"Space Grotesk",system-ui,sans-serif; color:#F4F6F2; -webkit-font-smoothing:antialiased; }
-  .glow { position:absolute; inset:0; background:
+  body { width:${w}px; height:${h}px; position:relative; overflow:hidden; background:${theme.ground};
+    font-family:"Space Grotesk",system-ui,sans-serif; color:rgb(${ink}); -webkit-font-smoothing:antialiased; }
+  .glow, .grid { position:absolute; inset:0; }
+  ${!nemi ? `.glow { background:
     radial-gradient(${px(1100)} ${px(680)} at 72% 86%, rgba(124,142,74,.40) 0%, rgba(124,142,74,.10) 42%, transparent 72%),
     radial-gradient(${px(760)} ${px(520)} at 12% 8%, rgba(255,255,255,.055) 0%, transparent 70%); }
-  .grid { position:absolute; inset:0; opacity:.055;
+  .grid { opacity:.055;
     background-image:linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px);
     background-size:${px(90)} ${px(90)};
-    -webkit-mask-image:radial-gradient(${px(900)} ${px(900)} at 50% 42%,#000 20%,transparent 78%); }
+    -webkit-mask-image:radial-gradient(${px(900)} ${px(900)} at 50% 42%,#000 20%,transparent 78%); }`
+  /* Blueprint corner: a square technical grid that appears toward the right edge and leaves
+     the left, where the words are, clean. */
+  : blueprint ? `.glow { background:${light
+      ? `radial-gradient(${px(900)} ${px(700)} at 100% 100%, rgba(16,163,126,.10) 0%, transparent 70%)`
+      : `linear-gradient(135deg, #000 0%, #070707 46%, #092223 100%)`}; }
+  .grid { background-image:linear-gradient(${light ? "#D2DCD9" : "rgba(16,163,126,.26)"} 1px,transparent 1px),linear-gradient(90deg,${light ? "#D2DCD9" : "rgba(16,163,126,.26)"} 1px,transparent 1px);
+    background-size:${px(72)} ${px(72)};
+    -webkit-mask-image:linear-gradient(100deg,transparent 34%,#000 100%); }`
+  /* Emerald wash: Deep Emerald to Signal Emerald, bleeding in from the bottom right corner. */
+  : `.glow { background:${light
+      ? `radial-gradient(${px(1250)} ${px(940)} at 106% 106%, rgba(16,163,126,.46) 0%, rgba(16,163,126,.20) 34%, rgba(16,163,126,.05) 58%, transparent 74%)`
+      : `radial-gradient(${px(1500)} ${px(1120)} at 106% 106%, rgba(16,163,126,.74) 0%, rgba(10,73,56,.66) 30%, rgba(10,73,56,.20) 56%, transparent 76%),
+    radial-gradient(${px(760)} ${px(520)} at 10% 6%, rgba(236,231,221,.04) 0%, transparent 70%)`}; }
+  .grid { display:none; }`}
   .frame { position:absolute; inset:0; padding:${px(64)} ${px(68)}; display:flex; flex-direction:column; }
   .top { display:flex; align-items:flex-start; justify-content:space-between; }
   .mark { font-size:${px(27)}; font-weight:700; letter-spacing:-.02em; }
-  .mark i { font-style:normal; color:#A8BF6A; }
+  .mark i { font-style:normal; color:${accent}; }
   .kicker { font-family:"IBM Plex Mono",monospace; font-size:${px(13)}; letter-spacing:.20em;
-    text-transform:uppercase; color:rgba(244,246,242,.52); text-align:right; line-height:1.7; white-space:pre-line; }
+    text-transform:uppercase; color:rgba(${ink},.52); text-align:right; line-height:1.7; white-space:pre-line; }
   .claim { margin-top:${px(44)}; }
   .claim.mid { margin-top:auto; margin-bottom:auto; }
   .eyebrow { font-family:"IBM Plex Mono",monospace; font-size:${px(14)}; letter-spacing:.22em;
-    text-transform:uppercase; color:#A8BF6A; margin-bottom:${px(20)}; }
+    text-transform:uppercase; color:${accentText}; margin-bottom:${px(20)}; }
   .num { font-size:${px(188)}; font-weight:700; line-height:.82; letter-spacing:-.055em; }
   .num small { font-size:${px(66)}; font-weight:500; letter-spacing:-.02em; margin-left:${px(6)}; }
-  .num sup { font-size:${px(80)}; font-weight:400; color:#A8BF6A; vertical-align:super; line-height:0; }
+  .num sup { font-size:${px(80)}; font-weight:400; color:${accent}; vertical-align:super; line-height:0; }
   .nb { white-space:nowrap; }
   .under { margin-top:${px(22)}; font-size:${px(32)}; font-weight:500; line-height:1.28; max-width:22ch; letter-spacing:-.015em; }
   .big { font-size:${px(72)}; font-weight:600; line-height:1.08; letter-spacing:-.035em; max-width:16ch; }
@@ -246,26 +318,26 @@ export function posterHtml(spec: PosterSpec): string {
     height:${px(620)}; object-fit:contain; object-position:center;
     filter:drop-shadow(0 ${px(40)} ${px(60)} rgba(0,0,0,.78)); }
   .foot { margin-top:auto; }
-  .facts { display:flex; border-top:1px solid rgba(244,246,242,.16); padding-top:${px(24)}; }
+  .facts { display:flex; border-top:1px solid rgba(${ink},.16); padding-top:${px(24)}; }
   .fact { flex:1; }
-  .fact + .fact { border-left:1px solid rgba(244,246,242,.16); padding-left:${px(26)}; }
+  .fact + .fact { border-left:1px solid rgba(${ink},.16); padding-left:${px(26)}; }
   .fact b { display:block; font-size:${px(25)}; font-weight:600; letter-spacing:-.01em; }
   .fact span { display:block; margin-top:${px(7)}; font-family:"IBM Plex Mono",monospace; font-size:${px(11.5)};
-    letter-spacing:.13em; text-transform:uppercase; color:rgba(244,246,242,.5); line-height:1.5; }
+    letter-spacing:.13em; text-transform:uppercase; color:rgba(${ink},.5); line-height:1.5; }
   .sig { margin-top:${px(30)}; display:flex; align-items:center; justify-content:space-between;
     font-family:"IBM Plex Mono",monospace; font-size:${px(12.5)}; letter-spacing:.14em;
-    text-transform:uppercase; color:rgba(244,246,242,.42); }
-  .sig b { color:#F4F6F2; font-weight:500; }
+    text-transform:uppercase; color:rgba(${ink},.42); }
+  .sig b { color:rgb(${ink}); font-weight:500; }
 
   /* ---- carousel ---- */
-  .counter { font-family:"IBM Plex Mono",monospace; font-size:${px(14)}; letter-spacing:.2em; color:rgba(244,246,242,.45); }
-  .counter b { color:#A8BF6A; font-weight:500; }
+  .counter { font-family:"IBM Plex Mono",monospace; font-size:${px(14)}; letter-spacing:.2em; color:rgba(${ink},.45); }
+  .counter b { color:${accentText}; font-weight:500; }
   .claim.narrow .big { max-width:11ch; }
   .say { margin-top:${px(26)}; font-size:${px(31)}; font-weight:400; line-height:1.4; max-width:19ch;
-    color:rgba(244,246,242,.84); letter-spacing:-.01em; }
+    color:rgba(${ink},.84); letter-spacing:-.01em; }
   .say.centred { margin-left:auto; margin-right:auto; text-align:center; max-width:24ch; }
   .swipe { margin-top:${px(26)}; font-family:"IBM Plex Mono",monospace; font-size:${px(14)};
-    letter-spacing:.2em; text-transform:uppercase; color:#A8BF6A; }
+    letter-spacing:.2em; text-transform:uppercase; color:${accentText}; }
   .num.huge { font-size:${px(200)}; }
   /* Off the right corner, so the words on the left are never run through. */
   .bike.edge { left:auto; right:${px(-150)}; top:auto; bottom:${px(96)}; transform:none; width:${px(760)}; }
@@ -276,35 +348,61 @@ export function posterHtml(spec: PosterSpec): string {
   .claim.centre { text-align:center; }
   /* Round, and large enough to be a person rather than a thumbnail. */
   .face { width:${px(300)}; height:${px(300)}; border-radius:50%; object-fit:cover; display:block;
-    margin:0 auto ${px(32)}; border:${px(4)} solid #A8BF6A; }
+    margin:0 auto ${px(32)}; border:${px(4)} solid ${accent}; }
   .person { font-size:${px(72)}; font-weight:600; letter-spacing:-.035em; line-height:1.08; }
   .person.small { font-size:${px(48)}; margin-top:${px(20)}; }
   .role { margin-top:${px(12)}; font-family:"IBM Plex Mono",monospace; font-size:${px(20)};
-    letter-spacing:.18em; text-transform:uppercase; color:#A8BF6A; }
+    letter-spacing:.18em; text-transform:uppercase; color:${accentText}; }
   .place { margin-top:${px(22)}; font-family:"IBM Plex Mono",monospace; font-size:${px(14)};
-    letter-spacing:.18em; text-transform:uppercase; color:rgba(244,246,242,.45); }
+    letter-spacing:.18em; text-transform:uppercase; color:rgba(${ink},.45); }
   .quote { font-size:${px(54)}; font-weight:500; line-height:1.26; letter-spacing:-.025em; max-width:20ch; }
-  .quote::before { content:"\\201C"; color:#A8BF6A; }
-  .quote::after { content:"\\201D"; color:#A8BF6A; }
+  .quote::before { content:"\\201C"; color:${accent}; }
+  .quote::after { content:"\\201D"; color:${accent}; }
 
   /* A landscape card has half the height, so the type that works in a 4:5 overruns it. */
   ${w > h ? `.num { font-size:${px(150)}; } .num.huge { font-size:${px(160)}; }
     .big { font-size:${px(54)}; max-width:22ch; } .person { font-size:${px(52)}; }
     .face { width:${px(190)}; height:${px(190)}; margin-bottom:${px(20)}; }
     .quote { font-size:${px(42)}; } .frame { padding:${px(48)} ${px(56)}; }` : ""}
+
+  ${nemi ? `/* ---- NEMI ---- */
+  /* The supporting tier is the same ink at 78%, as the brand book sets body text. */
+  .under, .say { color:rgba(${ink},.78); }
+  .logo { display:inline-block; width:${px(44)}; height:${px(26.5)}; margin-right:${px(12)}; vertical-align:${px(-3)};
+    background:${accent}; -webkit-mask:url("${logo}") center / contain no-repeat; mask:url("${logo}") center / contain no-repeat; }
+  /* A slim emerald rule leads every eyebrow. */
+  .eyebrow::before { content:""; display:inline-block; width:${px(36)}; height:${Math.max(2, Math.round(2 * u))}px;
+    background:${accent}; vertical-align:middle; margin-right:${px(14)}; }
+  /* Index tags over the facts, and the rule above them in the accent. */
+  .facts { counter-reset:fact; border-top-color:rgba(${ink},.22); }
+  .fact::before { counter-increment:fact; content:"[00" counter(fact) "]"; display:block; margin-bottom:${px(9)};
+    font-family:"IBM Plex Mono",monospace; font-size:${px(12)}; letter-spacing:.12em; color:${accentText}; }
+  .sig { color:rgba(${ink},.58); }
+  /* No rounded corners in this system: the portrait is a rectangle with one corner snipped. */
+  .face { border:0; border-radius:0; padding:${px(5)}; background:${accent};
+    clip-path:polygon(0 0, calc(100% - ${px(46)}) 0, 100% ${px(46)}, 100% 100%, 0 100%); }
+  ${light ? `.bike { filter:drop-shadow(0 ${px(30)} ${px(46)} rgba(7,7,7,.30)); }
+  .bleed { opacity:.22; }` : ""}
+  /* Registration ticks in the corners of the dark statement posters. */
+  .tick { position:absolute; width:${px(18)}; height:${px(18)};
+    background:linear-gradient(rgba(${ink},.5),rgba(${ink},.5)) center / 100% 1px no-repeat,
+      linear-gradient(rgba(${ink},.5),rgba(${ink},.5)) center / 1px 100% no-repeat; }
+  .tick.tl { left:${px(24)}; top:${px(24)}; } .tick.tr { right:${px(24)}; top:${px(24)}; }
+  .tick.bl { left:${px(24)}; bottom:${px(24)}; } .tick.br { right:${px(24)}; bottom:${px(24)}; }` : ""}
 </style></head><body>
   <div class="glow"></div><div class="grid"></div>
+  ${nemi && !light && !blueprint ? '<i class="tick tl"></i><i class="tick tr"></i><i class="tick bl"></i><i class="tick br"></i>' : ""}
   ${bike}
   <div class="frame">
     <div class="top">
-      <div class="mark">${esc(spec.mark || "BNC")} <i>${esc(spec.mark_tail || (CREW.includes(spec.template) ? "Motors" : "Challenger"))}</i></div>
+      <div class="mark">${logo && /^nemi\b/i.test(mark) ? '<span class="logo"></span>' : ""}${esc(mark)}${tail ? ` <i>${esc(tail)}</i>` : ""}</div>
       ${spec.counter ? `<div class="counter">${esc(spec.counter)}</div>`
         : spec.footnote && !["cover", "hiring"].includes(spec.template) ? `<div class="kicker">${esc(spec.footnote)}</div>` : ""}
     </div>
     ${body}
     <div class="foot">
       ${factRow}
-      <div class="sig"><span>bncmotors.in</span>${spec.source ? `<span><b>${esc(spec.source)}</b></span>` : ""}</div>
+      <div class="sig"><span>${esc(site)}</span>${spec.source ? `<span><b>${esc(spec.source)}</b></span>` : ""}</div>
     </div>
   </div>
 </body></html>`;

@@ -1,4 +1,4 @@
-import { handle, ok, readJson } from "@/lib/http";
+import { handleCan, handle, ok, readJson } from "@/lib/http";
 import { workerState, setWorkerEnabled, startWorker, kickWorker } from "@/lib/worker";
 
 export const runtime = "nodejs";
@@ -8,7 +8,7 @@ export const GET = handle(async () => {
   return ok(workerState());
 });
 
-export const POST = handle(async (req) => {
+export const POST = handleCan("manage", async (req) => {
   const b = await readJson<{ enabled?: boolean; run?: boolean }>(req);
   startWorker();
   if (typeof b.enabled === "boolean") setWorkerEnabled(b.enabled);

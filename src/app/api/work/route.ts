@@ -1,4 +1,6 @@
-import { handle, ok, bad, readJson } from "@/lib/http";
+import { handle, handleUser, ok, bad, readJson } from "@/lib/http";
+import { quickAdd, profiles } from "@/lib/inbox";
+import { KINDS } from "@/lib/allocate";
 import { listTasks, saveTask, remove, TASK_STATUS, TASK_AREAS, DOABLE_BY, type Task } from "@/lib/books";
 import { fillWork, suggestWork, syncWork } from "@/lib/workplan";
 import { plantProgramme, PROGRAMME_SIZE } from "@/lib/programme";
@@ -34,11 +36,15 @@ export const GET = handle(async (req) => {
     const st = doorState(key);
     if (st) doors[key] = st;
   }
-  return ok({ tasks, statuses: TASK_STATUS, areas: TASK_AREAS, doable: DOABLE_BY, programme_size: PROGRAMME_SIZE, doors });
+  /* Who the board is shared between, for the lanes and the "give to" menu. */
+  const team = profiles().filter((p) => p.takes_work).map((p) => ({ id: p.user_id, name: p.name, login: p.login, kinds: p.kinds }));
+  return ok({ tasks, statuses: TASK_STATUS, areas: TASK_AREAS, doable: DOABLE_BY, programme_size: PROGRAMME_SIZE, doors, team, kinds: KINDS.map((k) => ({ key: k.key, label: k.label })) });
 });
 
-export const POST = handle(async (req) => {
-  const b = await readJson<Partial<Task> & { action?: string }>(req);
+export const POST = handleUser(async (req, user) => {
+  const b = await readJson<Partial<Task> & { action?: string; text?: string; assignee?: string; due?: string }>(req);
+  /* One line or a pasted list, each line a task, each given to the right person. */
+  if (b.action === "quick") return ok({ tasks: quickAdd(b.text || "", user, { assignee: b.assignee, due: b.due, priority: b.priority }) }, 201);
   /* Fill the board from the calendar, Circuit's own health and its build queue. */
   if (b.action === "fill") return ok(fillWork(), 201);
   /* The standard marketing plan, as opposed to what is already happening here. Kept a separate
@@ -83,6 +89,8 @@ export const PATCH = handle(async (req) => {
   const b = await readJson<Partial<Task>>(req);
   if (!b.id) return bad("id required");
   if (b.status && !TASK_STATUS.includes(b.status as (typeof TASK_STATUS)[number])) return bad("Unknown status");
+  if (b.priority !== undefined && !["high", "normal", "low"].includes(b.priority)) return bad("Unknown priority");
+  if (b.kind !== undefined && !KINDS.some((k) => k.key === b.kind)) return bad("Unknown kind of work");
   const fault = timeFault(b);
   if (fault) return bad(fault);
   return ok(saveTask(b));

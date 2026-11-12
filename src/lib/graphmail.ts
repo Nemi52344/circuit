@@ -39,8 +39,15 @@ export function saveGraphSettings(s: { tenant?: string | null; client_id?: strin
   return graphSettings();
 }
 
+/* Where Microsoft is. Overridable only so a test copy can point at a stand-in; nothing in the
+   app sets these. */
+export const GRAPH = (process.env.CIRCUIT_GRAPH_BASE || "https://graph.microsoft.com").replace(/\/+$/, "");
+const LOGIN = (process.env.CIRCUIT_LOGIN_BASE || "https://login.microsoftonline.com").replace(/\/+$/, "");
+export const graphCredsReady = () => Boolean(graphTenant() && graphClientId() && graphSecret());
+
 /* A token for the app itself, cached until shortly before it expires. */
 let cached: { token: string; until: number } | null = null;
+export async function graphToken(): Promise<string> { return token(); }
 async function token(): Promise<string> {
   if (cached && cached.until > Date.now() + 60000) return cached.token;
   const tenant = graphTenant();
@@ -51,7 +58,7 @@ async function token(): Promise<string> {
     client_id: id, client_secret: secret,
     scope: "https://graph.microsoft.com/.default", grant_type: "client_credentials",
   });
-  const r = await fetch(`https://login.microsoftonline.com/${encodeURIComponent(tenant)}/oauth2/v2.0/token`, {
+  const r = await fetch(`${LOGIN}/${encodeURIComponent(tenant)}/oauth2/v2.0/token`, {
     method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body,
     signal: AbortSignal.timeout(30000),
   });
@@ -95,7 +102,7 @@ export async function sendGraphMail(msg: { to?: string; subject: string; html: s
       },
       saveToSentItems: true,
     };
-    const r = await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(from)}/sendMail`, {
+    const r = await fetch(`${GRAPH}/v1.0/users/${encodeURIComponent(from)}/sendMail`, {
       method: "POST",
       headers: { Authorization: `Bearer ${t}`, "Content-Type": "application/json" },
       body: JSON.stringify(payload),

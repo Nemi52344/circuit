@@ -1,4 +1,4 @@
-import { getDb, newId, now, getSetting } from "@/lib/db";
+import { getDb, newId, now, getSetting, tryFilePath } from "@/lib/db";
 import { getBrand } from "@/lib/brand";
 import { buildRecreatePrompt } from "@/lib/gemini";
 import { handle, ok, bad, readJson } from "@/lib/http";
@@ -18,7 +18,7 @@ function instructionsFor(jobId: string) {
   return [
     `Render Circuit render job ${jobId}. Work only on this job and do not ask questions.`,
     `1. GET http://localhost:3210/api/render to find the job with id ${jobId}. Read its model, prompt, reference_file_id and product_file_id.`,
-    "2. The image files are in ./data/uploads named <file_id>.<ext>.",
+    "2. The image files are in ./data/uploads named <file_id>.<ext> (Circuit writes them out from its database when step 1 lists the job).",
     "3. Using the Higgsfield MCP: media_upload for both files, PUT the bytes to each presigned upload_url with the returned headers, then media_confirm with type image.",
     "4. Call generate_image with exactly the job's model id, the job's prompt, aspect_ratio 4:5, and both media ids in medias. Use role image_references, except for marketing_studio_image which uses role image. Do not substitute a different model: if the model is rejected, go to step 7.",
     "5. Poll with jobs_wait until the job is terminal, then download the result_url to a temporary file.",
@@ -50,7 +50,14 @@ export const GET = handle(async (req) => {
        LEFT JOIN creations c ON c.id = j.creation_id
        ${where} ORDER BY j.created_at DESC LIMIT 100`,
     )
-    .all(...vals);
+    .all(...vals) as Record<string, unknown>[];
+  /* The files live in the database; the agent reads them from the uploads folder, so the jobs
+     still to run have theirs written out there first. */
+  for (const r of rows) {
+    if (r.status !== "queued" && r.status !== "running") continue;
+    tryFilePath(r.reference_file_id as string | null);
+    tryFilePath(r.product_file_id as string | null);
+  }
   return ok(rows);
 });
 

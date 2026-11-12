@@ -1,8 +1,8 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef } from "react";
-import { NAV, activeNav } from "@/lib/nav";
+import { useEffect, useRef, useState } from "react";
+import { activeNav, menuFor, type NavItem } from "@/lib/nav";
 import { useMe } from "@/components/Gate";
 import { can } from "@/lib/roles";
 
@@ -37,6 +37,7 @@ const ICONS: Record<string, React.ReactNode> = {
   book: <><path d="M2 2.5h4.5A1.5 1.5 0 0 1 8 4v10a1.5 1.5 0 0 0-1.5-1.5H2z" /><path d="M14 2.5H9.5A1.5 1.5 0 0 0 8 4v10a1.5 1.5 0 0 1 1.5-1.5H14z" /></>,
   /* bars — Work, a chart of bars at different offsets. */
   bars: <><path d="M2 3.5h7M4.5 8h8M2 12.5h5.5" /></>,
+  inbox: <><path d="M2 9.5 3.8 3h8.4L14 9.5V13H2z" /><path d="M2 9.5h3.5l1 1.5h3l1-1.5H14" /></>,
   /* ledger — Admin. */
   ledger: <><rect x="2.5" y="1.5" width="11" height="13" /><path d="M5.5 5h5M5.5 8h5M5.5 11h3" /></>,
   /* clock — Crons: the thing that runs on a schedule. */
@@ -67,6 +68,10 @@ export default function Nav() {
   const path = usePathname();
   const { me } = useMe();
   const nav = useRef<HTMLElement>(null);
+  /* On a phone the menu folds behind one button, so the page starts at the top of the screen
+     instead of under a strip of links cut off at both edges. Closed again on every move. */
+  const [open, setOpen] = useState(false);
+  useEffect(() => { setOpen(false); }, [path]);
 
   /* On a phone the rail is one horizontal strip holding nineteen links, so the page you are on
      is usually off to the right of what you can see. Without this you land on a nav that looks
@@ -89,33 +94,46 @@ export default function Nav() {
   // approvers opening a review link see the post only, not the workspace
   if (path?.startsWith("/review/")) return null;
   const active = activeNav(path);
-  const mine = NAV.filter((it) => !it.needs || can(me, it.needs));
-  const groups = Array.from(new Set(mine.map((i) => i.group)));
+  const { main, more } = menuFor((c) => can(me, c));
+  const groups = Array.from(new Set(main.map((i) => i.group)));
+  const link = (it: NavItem) => (
+    <Link key={it.href} href={it.href} className={active?.href === it.href ? "active" : ""} aria-current={active?.href === it.href ? "page" : undefined}>
+      <Icon name={it.icon} />
+      {it.label}
+    </Link>
+  );
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar ${open ? "is-open" : ""}`}>
       <div className="brand">
         <div className="brand-mark" aria-hidden="true" />
         <div>
-          <h1>Circuit</h1>
+          <strong className="brand-name">Circuit</strong>
           <small>BNC Motors marketing</small>
         </div>
+        <button type="button" className="nav-toggle" aria-expanded={open} aria-controls="primary-nav" onClick={() => setOpen((o) => !o)}>
+          <span className="nav-here">{active?.label || "Menu"}</span>
+          <span aria-hidden="true" className="nav-burger" />
+          <span className="sr-only">{open ? "Close the menu" : "Open the menu"}</span>
+        </button>
       </div>
-      <nav className="nav" aria-label="Primary" ref={nav}>
+      <nav className="nav" id="primary-nav" aria-label="Primary" ref={nav}>
         {groups.map((g) => (
           <div key={g} style={{ display: "contents" }}>
             <div className="nav-section">{g}</div>
-            {mine.filter((it) => it.group === g).map((it) => (
-              <Link key={it.href} href={it.href} className={active?.href === it.href ? "active" : ""} aria-current={active?.href === it.href ? "page" : undefined}>
-                <Icon name={it.icon} />
-                {it.label}
-              </Link>
-            ))}
+            {main.filter((it) => it.group === g).map(link)}
           </div>
         ))}
+        {more.length ? (
+          /* Open by itself when the page you are on lives in here, so you can see where you are. */
+          <details className="nav-more" open={more.some((it) => it.href === active?.href) || undefined}>
+            <summary className="nav-section">More</summary>
+            {more.map(link)}
+          </details>
+        ) : null}
       </nav>
       <div className="side-note">
-        <strong>Everything stays on this Mac</strong>
-        Nothing is posted or sent without you.
+        <strong>Runs on the marketing Mac</strong>
+        Everything is in its database, copied online every minute. Nothing is posted or sent without you.
       </div>
     </aside>
   );

@@ -1,4 +1,7 @@
-import { handle, ok, bad, readJson } from "@/lib/http";
+import { handleCan, ok, bad, readJson } from "@/lib/http";
+
+/* Mail settings hold the hook and the Microsoft secret that send as the company, so reading
+   them and changing them are for managers and the Admin — the Settings page, which is theirs. */
 import { mailSettings, saveMailSettings, sendMail } from "@/lib/outbox";
 import { graphSettings, saveGraphSettings, sendGraphMail } from "@/lib/graphmail";
 import { latestPdf } from "@/lib/intelpdf";
@@ -6,9 +9,9 @@ import { supabaseSettings, saveSupabaseSettings, ensureBucket, TABLE_SQL } from 
 
 export const runtime = "nodejs";
 
-export const GET = handle(async () => ok({ ...mailSettings(), graph: graphSettings(), supabase: { ...supabaseSettings(), sql: TABLE_SQL } }));
+export const GET = handleCan("manage", async () => ok({ ...mailSettings(), graph: graphSettings(), supabase: { ...supabaseSettings(), sql: TABLE_SQL } }));
 
-export const POST = handle(async (req) => {
+export const POST = handleCan("manage", async (req) => {
   const b = await readJson<{ action?: string; hook?: string; to?: string; auto?: boolean; tenant?: string; client_id?: string; client_secret?: string; from?: string; url?: string; key?: string; bucket?: string; table?: string }>(req);
   if (b.action === "save") return ok({ ...saveMailSettings(b), graph: graphSettings() });
   if (b.action === "graph") return ok({ ...mailSettings(), graph: saveGraphSettings(b) });

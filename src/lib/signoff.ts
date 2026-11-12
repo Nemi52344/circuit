@@ -84,7 +84,7 @@ function allStates(): PostState[] {
 }
 
 /* Everything waiting to be looked at, plus anything whose approval has gone stale. */
-export const waitingForSignoff = (): PostState[] => allStates().filter((s) => !s.cleared);
+export const waitingForSignoff = (): PostState[] => allStates().filter((s) => !s.cleared && !isVideoPost(s.id));
 
 export const signedOff = (): PostState[] => allStates().filter((s) => s.cleared);
 
@@ -133,7 +133,22 @@ export function publishAllowed(postId: string): { ok: boolean; reason: string } 
   const people = getAccountsDb().prepare("SELECT role FROM users WHERE active = 1").all() as { role: string }[];
   if (!people.some((u) => can(u, "approve"))) return { ok: true, reason: "" };
 
+  /* Sign-off is for posters. A video — a reel cut from our own footage — goes out without one;
+     that is the team's rule, and it keeps the manager's queue to the thing he actually checks. */
+  if (isVideoPost(postId)) return { ok: true, reason: "" };
+
   const s = stateOf(postId);
   if (!s) return { ok: false, reason: "That post is not here any more" };
   return s.cleared ? { ok: true, reason: "" } : { ok: false, reason: s.blocked_reason };
+}
+
+/* A post whose media is all video. Its main file and any slides are checked: a carousel with one
+   still in it is still a poster as far as sign-off goes. */
+export function isVideoPost(postId: string): boolean {
+  const db = getDb();
+  const main = db.prepare(`SELECT COALESCE(p.file_id, c.file_id) AS f FROM posts p LEFT JOIN creations c ON c.id = p.creation_id WHERE p.id = ?`).get(postId) as { f: string | null } | undefined;
+  const ids = [main?.f, ...(db.prepare("SELECT file_id FROM post_media WHERE post_id = ?").all(postId) as { file_id: string }[]).map((r) => r.file_id)].filter((x): x is string => Boolean(x));
+  if (!ids.length) return false;
+  const mime = db.prepare("SELECT mime FROM files WHERE id = ?");
+  return ids.every((id) => ((mime.get(id) as { mime: string } | undefined)?.mime || "").startsWith("video/"));
 }

@@ -93,7 +93,7 @@ function Analytics() {
       {view}
       <div className="page-head">
         <div>
-          <h2>Results</h2>
+          <h1>Results</h1>
           <p className="lede">How your posts did, and what that says about what to make next. Instagram numbers come in by themselves; other platforms are typed in.</p>
         </div>
         <Pill tone="info">{posted.length} planned here and posted · {latest.size} with numbers against them</Pill>

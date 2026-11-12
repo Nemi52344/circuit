@@ -457,9 +457,9 @@ function Calendar() {
       {view}
       <div className="page-head">
         <div>
-          <h2>{mode === "month"
+          <h1>{mode === "month"
             ? month.toLocaleDateString("en-IN", { month: "long", year: "numeric" })
-            : `${weekStart.toLocaleDateString("en-IN", { day: "numeric", month: "short" })} – ${weekDays[6].toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`}</h2>
+            : `${weekStart.toLocaleDateString("en-IN", { day: "numeric", month: "short" })} – ${weekDays[6].toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`}</h1>
           <p className="lede">
             Plan when each post goes out. Click any day to add one by hand, or drag a post to move it —
             {mode === "month" ? " the month keeps its time of day" : " the week sets the hour you drop it on"}.

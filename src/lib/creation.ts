@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import { getDb, getFile, newId, now, saveFileBuffer, uploadDir } from "@/lib/db";
+import { getDb, getFile, newId, now, saveFileBuffer, tryFilePath } from "@/lib/db";
 
 const run = promisify(execFile);
 
@@ -95,8 +95,8 @@ export async function exportCreation(creationId: string, aspect: AspectKey): Pro
   if (!c?.file_id) throw new Error("That creation has no picture");
   const f = getFile(c.file_id);
   if (!f) throw new Error("Its picture is missing");
-  const abs = path.join(uploadDir(), f.path);
-  if (!fs.existsSync(abs)) throw new Error("Its picture is missing on disk");
+  const abs = tryFilePath(f);
+  if (!fs.existsSync(abs)) throw new Error("Its picture is not stored in Circuit");
 
   const chrome = chromePath();
   if (!chrome) throw new Error("Chrome is needed to export a shape and was not found on this Mac");

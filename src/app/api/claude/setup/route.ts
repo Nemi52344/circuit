@@ -1,11 +1,11 @@
-import { handle, ok, bad, readJson } from "@/lib/http";
+import { handleCan, ok, bad, readJson } from "@/lib/http";
 import { claudePath, openInTerminal, addHiggsfield, HIGGSFIELD_MCP_URL } from "@/lib/claudecli";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 /* Fixed actions only. Nothing from the request ever reaches a shell. */
-export const POST = handle(async (req) => {
+export const POST = handleCan("manage", async (req) => {
   const b = await readJson<{ action?: string }>(req);
   const bin = claudePath();
   if (!bin) return bad("The Claude Code CLI is not installed on this Mac. Install Claude Code, then reopen this page.", 424);

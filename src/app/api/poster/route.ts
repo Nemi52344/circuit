@@ -1,6 +1,6 @@
 import { handle, ok, bad, readJson } from "@/lib/http";
 import { getDb } from "@/lib/db";
-import { makePoster, posterHtml, TEMPLATES, SIZES, type PosterSpec } from "@/lib/poster";
+import { makePoster, posterHtml, TEMPLATES, SIZES, THEMES, DEFAULT_THEME, type PosterSpec } from "@/lib/poster";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -23,7 +23,7 @@ export const GET = handle(async () => {
     FROM files
     WHERE brand = 1 AND mime LIKE 'image/%' AND tags NOT LIKE '%made-in-circuit%'
     ORDER BY created_at DESC LIMIT 60`).all();
-  return ok({ templates: TEMPLATES, sizes: SIZES, photos });
+  return ok({ templates: TEMPLATES, sizes: SIZES, themes: THEMES, default_theme: DEFAULT_THEME, photos });
 });
 
 export const POST = handle(async (req) => {
@@ -31,10 +31,11 @@ export const POST = handle(async (req) => {
 
   if (!TEMPLATES.some((t) => t.id === b.template)) return bad("Pick a template");
   if (!SIZES[b.size]) return bad("Pick a size");
+  if (b.theme && !THEMES.some((t) => t.id === b.theme)) return bad("Pick a look");
   /* The preview comes first and is never validated. A blank form is a perfectly reasonable
      thing to look at — it shows you the frame you are about to fill — and refusing it left the
      studio opening on a white rectangle until you happened to type a number in the right box. */
-  if (b.preview) return new Response(posterHtml(b), { headers: { "Content-Type": "text/html; charset=utf-8" } });
+  if (b.preview) return new Response(posterHtml(b, { web: true }), { headers: { "Content-Type": "text/html; charset=utf-8" } });
 
   /* Each template is checked against what it actually cannot be drawn without, rather than one
      rule for all of them — a welcome card with no name is an empty circle, and a point slide

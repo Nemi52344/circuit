@@ -2,7 +2,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
-import { Globe } from "@/components/Globe";
 import { LineChart, type Point } from "@/components/Chart";
 import { moneyShort } from "@/lib/money";
 import { fmtDate, fileUrl } from "@/lib/api";
@@ -26,14 +25,26 @@ type Ig = {
 const big = (v: number | null | undefined) =>
   v === null || v === undefined ? "—" : v >= 10000 ? `${(v / 1000).toFixed(v >= 100000 ? 0 : 1)}k` : v.toLocaleString("en-IN");
 
-/* The front door.
+/* Home: what needs you today.
 
-   Every other page in Circuit answers one question. This one answers "where are
-   we", and it has to do it in the time it takes to glance — so it is one
-   sentence, one set of counted numbers, and a way into each part of the place.
+   The first screen answers one question — what is waiting on me — with the work that is due or
+   late, the posters waiting for sign-off, the next seven days of the calendar and the day's
+   comments against the Engager's goal, each with the first rows showing and one click to the
+   page that deals with it. How the account is doing and the way into every other part of the
+   place sit below.
 
-   The numbers are counted from the database, never rounded up for effect. If the
-   month has no revenue in it, it says so rather than showing a hopeful zero. */
+   The numbers are counted from the database, never rounded up for effect. If the month has no
+   revenue in it, it says so rather than showing a hopeful zero. */
+
+type Today = {
+  mine: boolean;
+  due: { id: string; title: string; end_date: string; late: boolean; priority: string; who: string }[];
+  due_total: number; open_total: number;
+  signoff: { id: string; platform: string; caption: string; when: string; late: boolean; back: boolean }[];
+  signoff_total: number;
+  week: { id: string; date: string; topic: string; platforms: string[]; stage: string }[];
+  engage: { today: number; goal: number; streak: number };
+};
 
 type Data = {
   planned: number; ahead: number; posted: number; assets: number; known: number;
@@ -43,6 +54,13 @@ type Data = {
   month: { revenue: number; costs: number; net: number } | null;
   last_intel: { at: string; date: string; items: number } | null;
   ig?: Ig;
+  today?: Today;
+};
+
+const dayName = (iso: string) => new Date(`${iso.slice(0, 10)}T12:00:00`).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
+const dueWord = (iso: string, late: boolean) => {
+  const days = Math.round((Date.parse(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`) - Date.parse(`${iso}T00:00:00Z`)) / 86400_000);
+  return late ? (days === 1 ? "1 day late" : `${days} days late`) : "Due today";
 };
 
 const AREAS = [
@@ -66,38 +84,97 @@ export default function HomePage() {
 
   return (
     <div className="stack home">
-      <section className="hero-world">
-        <div className="hw-copy">
-          <span className="hw-eyebrow">BNC Motors · a division of Nemi</span>
-          <h1>
-            Every marketing job<br />in <em>one</em> place.
-          </h1>
-          <p>
-            Planning, research, drafts, captions, approvals, publishing, the morning intelligence
-            briefing, and the books behind all of it. One app on one Mac — nothing goes out without you.
-          </p>
-          <div className="actions">
-            <Link className="btn primary" href="/">Open the month</Link>
-            <Link className="btn" href="/slots">See what needs you</Link>
-          </div>
-          {d?.last_intel ? (
-            <span className="hw-note">Last briefing {fmtDate(d.last_intel.at)} · {d.last_intel.items} items</span>
-          ) : null}
-        </div>
-        <div className="hw-globe"><Globe /></div>
-      </section>
+      {/* ---- what needs you today ---- */}
+      <header className="td-head">
+        <h1>Today</h1>
+        <p>
+          {new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })}
+          {d?.today ? <> · {d.today.due_total ? <b>{d.today.due_total} job{d.today.due_total === 1 ? "" : "s"} due or late</b> : "nothing due"}
+            {" · "}{d.today.signoff_total ? `${d.today.signoff_total} poster${d.today.signoff_total === 1 ? "" : "s"} waiting for sign-off` : "no sign-offs waiting"}
+            {" · "}{d.today.engage.today} of {d.today.engage.goal} comments</> : null}
+        </p>
+      </header>
 
-      <section className="hw-strip">
-        <div><strong>{n(d?.planned)}</strong><small>posts in the plan</small></div>
-        <div><strong>{n(d?.work.open)}</strong><small>jobs on the board{d?.work.late ? ` · ${d.work.late} late` : ""}</small></div>
-        <div><strong>{n(d?.briefings)}</strong><small>briefings archived</small></div>
-        <div><strong>{n(d?.known)}</strong><small>things learned</small></div>
-        <div>
-          {/* The Admin sees the month's net; everyone else sees how many posts have gone out,
-              which is the number this slot is worth to them. */}
+      <div className="td-grid">
+        <section className="panel td-block">
+          <div className="td-block-head">
+            <h2>{d?.today?.mine ? "Your work" : "Work due"}</h2>
+            <Link href="/work" className="td-all">{d?.today ? `All ${d.today.open_total} open` : "Open Work"} →</Link>
+          </div>
+          {d?.today?.due.length ? (
+            <ul className="td-list">
+              {d.today.due.map((t) => (
+                <li key={t.id}>
+                  <Link href="/work">
+                    <span className="td-title">{t.title}</span>
+                    <span className="td-meta">{t.who ? `${t.who} · ` : ""}<span className={t.late ? "td-late" : ""}>{dueWord(t.end_date, t.late)}</span>{t.priority === "high" ? " · urgent" : ""}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : <p className="td-empty">{d?.today ? "Nothing due today or late. The rest is on the board." : "Loading…"}</p>}
+          {d?.today && d.today.due_total > d.today.due.length ? <Link href="/work" className="td-more">{d.today.due_total - d.today.due.length} more due</Link> : null}
+        </section>
+
+        <section className="panel td-block">
+          <div className="td-block-head">
+            <h2>Waiting for sign-off</h2>
+            <Link href="/content" className="td-all">Content status →</Link>
+          </div>
+          {d?.today?.signoff.length ? (
+            <ul className="td-list">
+              {d.today.signoff.map((p) => (
+                <li key={p.id}>
+                  <Link href="/content">
+                    <span className="td-title">{p.caption || "A poster with no caption yet"}</span>
+                    <span className="td-meta">{p.platform} · <span className={p.late ? "td-late" : ""}>{p.late ? `was due ${dayName(p.when)}` : dayName(p.when)}</span>{p.back ? " · sent back" : ""}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : <p className="td-empty">{d?.today ? "Nothing waiting. Every poster is signed off." : "Loading…"}</p>}
+          {d?.today && d.today.signoff_total > d.today.signoff.length ? <Link href="/content" className="td-more">{d.today.signoff_total - d.today.signoff.length} more waiting</Link> : null}
+        </section>
+
+        <section className="panel td-block">
+          <div className="td-block-head">
+            <h2>The next seven days</h2>
+            <Link href="/" className="td-all">Calendar →</Link>
+          </div>
+          {d?.today?.week.length ? (
+            <ul className="td-list">
+              {d.today.week.map((x) => (
+                <li key={x.id}>
+                  <Link href={`/slot/${x.id}`}>
+                    <span className="td-title">{x.topic || "No topic yet"}</span>
+                    <span className="td-meta">{dayName(x.date)} · {x.platforms.join(", ")} · {x.stage}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : <p className="td-empty">{d?.today ? "Nothing planned this week. Fill the month from the Calendar." : "Loading…"}</p>}
+        </section>
+      </div>
+
+      {/* The day in four figures, read as type in one divided strip. */}
+      <section className="td-strip">
+        <Link href="/engage">
+          <strong>{d?.today ? `${d.today.engage.today} / ${d.today.engage.goal}` : "—"}</strong>
+          <small>comments left today{d?.today?.engage.streak ? ` · ${d.today.engage.streak}-day streak` : ""}</small>
+        </Link>
+        <Link href="/intel">
+          <strong>{d?.last_intel ? `${d.last_intel.items}` : "—"}</strong>
+          <small>{d?.last_intel ? `items in the briefing of ${fmtDate(d.last_intel.at)}` : "no briefing yet"}</small>
+        </Link>
+        <Link href="/">
+          <strong>{n(d?.planned)}</strong>
+          <small>posts in the plan · {n(d?.ahead)} booked ahead</small>
+        </Link>
+        <Link href={d?.month ? "/money" : "/reports"}>
+          {/* The Admin sees the month's net; everyone else sees how many posts have gone out. */}
           <strong>{d?.month ? (d.month.revenue || d.month.costs ? moneyShort(d.month.net) : "—") : n(d?.posted)}</strong>
-          <small>{!d?.month ? "posts gone out" : !d.month.revenue && !d.month.costs ? "no books this month yet" : "net this month"}</small>
-        </div>
+          <small>{!d?.month ? "posts gone out" : !d.month.revenue && !d.month.costs ? "no books this month yet" : "marketing net this month"}</small>
+        </Link>
       </section>
 
       {/* ---- how the account is actually doing ---- */}
@@ -207,6 +284,7 @@ export default function HomePage() {
         </section>
       ) : null}
 
+      <h2 className="td-sub">Everywhere else</h2>
       <section className="hw-areas">
         {AREAS.map((a) => (
           <Link key={a.href + a.label} href={a.href} className="hw-area">

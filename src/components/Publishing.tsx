@@ -53,7 +53,7 @@ export function PublishingPanel({ push }: { push: (t: string, tone?: string) => 
   return (
     <section className="panel stack">
       <div className="panel-head" style={{ marginBottom: 0 }}>
-        <h3>Posting to the platforms</h3>
+        <h3>Publishing <span className="muted">· Postiz</span></h3>
         {st.connected
           ? <Pill tone="ok">Connected{st.self_hosted ? " · your own server" : ""}</Pill>
           : <Pill tone={st.error && st.error !== "No API key saved yet" ? "bad" : "warn"}>Not connected</Pill>}

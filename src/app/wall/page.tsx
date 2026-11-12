@@ -158,7 +158,7 @@ export default function WallPage() {
       {view}
       <div className="page-head">
         <div>
-          <h2>Wall</h2>
+          <h1>Wall</h1>
           <p className="lede">Your created images. Approve the ones you want to post, then schedule them.</p>
         </div>
         <div className="row tight wrap">

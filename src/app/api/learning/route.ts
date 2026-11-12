@@ -2,7 +2,9 @@ import { handleUser, handleCan, ok, bad, readJson } from "@/lib/http";
 import { can } from "@/lib/roles";
 import {
   KINDS, TEST_SIZE, PASS_MARK, bankCounts, listQuestions, startTest, submitTest, myAttempts, teamScores, setStatus, generateQuestions,
+  progressOf, teamCourse,
 } from "@/lib/learning";
+import { LEVELS, LESSON_PASS } from "@/lib/syllabus";
 import { MODULES } from "@/lib/modules";
 
 export const runtime = "nodejs";
@@ -17,8 +19,14 @@ export const GET = handleUser(async (_req, user) => {
   return ok({
     kinds: KINDS, size: TEST_SIZE, pass: PASS_MARK, counts: bankCounts(), modules: MODULES,
     mine: myAttempts(taker(user).id),
+    /* The course: its lessons go to everyone in full — they are reading, not a test — and the
+       checks' answers stay in the bank like every other question's. */
+    levels: LEVELS.map((l) => ({ ...l, lessons: l.lessons.map(({ checks, ...x }) => ({ ...x, checks: checks.length })) })),
+    lesson_pass: LESSON_PASS,
+    progress: progressOf(taker(user).id),
     can_manage: runs,
     team: runs ? teamScores() : null,
+    team_course: runs ? teamCourse() : null,
     bank: runs ? listQuestions() : null,
   });
 });

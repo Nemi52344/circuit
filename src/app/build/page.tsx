@@ -66,7 +66,7 @@ export default function BuildPage() {
       {view}
       <div className="page-head">
         <div>
-          <h2>What to build next</h2>
+          <h1>What to build next</h1>
           <p className="lede">
             Circuit reads its own specification and its own health, then says what is worth building next
             and how. It writes the plan; it does not write itself — you decide, and the code is written with someone watching.

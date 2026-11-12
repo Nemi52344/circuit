@@ -1,13 +1,13 @@
 import { handle, handleCan, ok, bad, readJson } from "@/lib/http";
 import {
   listConversations, findConversations, draftOptions, chooseOption, saveConversation, refreshPost, addByLink,
-  removeConversation, joinSummary, checkLink, PLATFORMS, STATUSES, ANGLES, VOICES, type Conversation,
+  removeConversation, joinSummary, engageStats, checkLink, PLATFORMS, SEARCHABLE, STATUSES, ANGLES, VOICES, type Conversation,
 } from "@/lib/joinin";
 import { getDb, now } from "@/lib/db";
 
 export const runtime = "nodejs";
 
-/* Posts on LinkedIn and X that are worth replying to, and what we would say.
+/* Posts on LinkedIn, X, Instagram and Facebook that are worth replying to, and what we would say.
 
    Nothing here posts anything. There is no route that could: Circuit finds the link, writes the
    draft, and a person opens the post and leaves the comment themselves. */
@@ -17,7 +17,9 @@ export const GET = handle(async (req) => {
   return ok({
     conversations: listConversations(status),
     summary: joinSummary(),
+    stats: engageStats(),
     platforms: PLATFORMS,
+    searchable: SEARCHABLE,
     statuses: STATUSES,
     angles: ANGLES,
     voices: VOICES,

@@ -44,7 +44,9 @@ export function Tabs({ tabs, active, onPick }: {
 }
 
 /* A cell you can type straight into. Saving happens when you leave the box or press Enter, so
-   there is no Save button to forget and no half-typed number written to the database. */
+   there is no Save button to forget and no half-typed number written to the database. It reads
+   as plain text until it is pointed at or focused (.cell), so a table of them is a table, not a
+   wall of boxes. */
 export function Cell({ value, onSave, type = "text", placeholder = "", align = "", options, width }: {
   value: string | number; onSave: (v: string) => void; type?: string; placeholder?: string;
   align?: string; options?: readonly string[]; width?: number;
@@ -55,7 +57,7 @@ export function Cell({ value, onSave, type = "text", placeholder = "", align = "
 
   if (options) {
     return (
-      <select className="input" style={{ minHeight: 30, padding: "0 6px", fontSize: 13 }} value={String(value ?? "")}
+      <select className="input cell" style={{ minHeight: 30, padding: "0 6px", fontSize: 13 }} value={String(value ?? "")}
         onChange={(e) => onSave(e.target.value)}>
         {options.map((o) => <option key={o} value={o}>{o}</option>)}
       </select>
@@ -63,7 +65,7 @@ export function Cell({ value, onSave, type = "text", placeholder = "", align = "
   }
   return (
     <input
-      className="input"
+      className="input cell"
       style={{ minHeight: 30, padding: "0 7px", fontSize: 13, textAlign: align === "num" ? "right" : "left", width: width ? `${width}px` : "100%" }}
       type={type} placeholder={placeholder}
       value={editing ? v : String(value ?? "")}
