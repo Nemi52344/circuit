@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import ts from "typescript";
 
 /* Which column a piece of content sits in, read from the real module the board uses. */
@@ -10,7 +11,7 @@ const src = fs.readFileSync(new URL("../src/lib/contentstatus.ts", import.meta.u
 const js = ts.transpileModule(src, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
 const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "cstat-")), "contentstatus.mjs");
 fs.writeFileSync(out, js);
-const c = await import(`file://${out}`);
+const c = await import(pathToFileURL(out).href);
 const T = "2026-10-28";
 const post = (o) => ({ status: "scheduled", scheduled_at: "2026-11-02T18:00", is_video: false, signoff: null, approvers: true, ...o });
 

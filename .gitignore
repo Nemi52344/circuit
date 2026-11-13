@@ -12,6 +12,12 @@ data/circuit.db*
 # put together. It was not covered by the line above, because that line names circuit.db.
 data/accounts.db*
 
+# Brands get their own database one directory down - data/<brand>/circuit.db - and the two
+# patterns above contain a slash, so git anchors them to this directory and they never reach
+# it. A brand's database holds the same keys as the one above, so it is named again here.
+data/**/circuit.db*
+data/**/accounts.db*
+
 # Backups are copies of that same database, with the same secrets inside them.
 data/backups/
 
@@ -19,6 +25,7 @@ data/backups/
 # drafts, scraped references, the morning briefings, and the receipts and card
 # statements. Business documents, not source code.
 data/uploads/*
+data/**/uploads/*
 !data/uploads/.gitkeep
 data/receipts/
 data/inbox/

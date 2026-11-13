@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import ts from "typescript";
 
 /* The video edit's arithmetic, read from the real module the studio uses. */
@@ -10,7 +11,7 @@ const src = fs.readFileSync(new URL("../src/lib/videoplan.ts", import.meta.url),
 const js = ts.transpileModule(src, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
 const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "vplan-")), "videoplan.mjs");
 fs.writeFileSync(out, js);
-const v = await import(`file://${out}`);
+const v = await import(pathToFileURL(out).href);
 
 test("cuts are kept inside the footage, in order, merged, and no longer than asked", () => {
   const cuts = v.cleanCuts([{ start: 50, end: 70 }, { start: 5, end: 12 }, { start: 11.9, end: 14 }, { start: 80, end: 200 }, { start: 3, end: 3.5 }], 90, 15);

@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import { getDb, newId, now, getFile, tryFilePath } from "@/lib/db";
 import { runChatGptJson } from "@/lib/chatgpt";
+import { findTool } from "@/lib/toolpath";
 
 /* Reading a credit card statement.
 
@@ -15,8 +16,9 @@ import { runChatGptJson } from "@/lib/chatgpt";
    to read it the way a person would — which is also how it copes with a statement that arrives
    as three columns, or with the date in a format nobody else uses. */
 
-const PDFTOTEXT = ["/opt/homebrew/bin/pdftotext", "/usr/local/bin/pdftotext", "/usr/bin/pdftotext"];
-const pdftotext = () => PDFTOTEXT.find((p) => fs.existsSync(p)) || null;
+/* Looked up rather than listed: poppler lands somewhere different on every platform, and a
+   hard-coded Homebrew path finds nothing at all on Windows. */
+const pdftotext = () => findTool("pdftotext");
 
 export type Charge = {
   id: string; statement_id: string; charged_on: string; merchant: string; amount: number;

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import ts from "typescript";
 
 /* What goes to the online copy and what is held back, read from the real module. */
@@ -10,7 +11,7 @@ const src = fs.readFileSync(new URL("../src/lib/mirrorplan.ts", import.meta.url)
 const js = ts.transpileModule(src, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
 const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "mirror-")), "mirrorplan.mjs");
 fs.writeFileSync(out, js);
-const m = await import(`file://${out}`);
+const m = await import(pathToFileURL(out).href);
 
 test("sign-ins, password copies and finance stay on the Mac unless finance is allowed", () => {
   const all = ["posts", "sessions", "users", "mirror_rows", "people", "bills", "pnl", "settings", "sqlite_sequence"];

@@ -15,11 +15,32 @@ const run = promisify(execFile);
    Rendered by printing a page in headless Chrome, which is already on this Mac — no library,
    no service, nothing new to install. */
 
-const CHROME = [
+/* Chrome does the rendering, and where it sits depends on the machine. The list was written
+   when Circuit only ever ran on one Mac; on Windows every entry misses, chromePath returns
+   null, and both the poster and the morning briefing fail with a message about a Mac that
+   the person is not sitting at. Windows keeps a browser under Program Files or, when it was
+   installed for one user only, under LOCALAPPDATA, so both are asked for. */
+const macChrome = [
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
   "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
   "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
 ];
+
+function winChrome(): string[] {
+  const roots = [
+    process.env.ProgramFiles || "C:/Program Files",
+    process.env["ProgramFiles(x86)"] || "C:/Program Files (x86)",
+    process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local"),
+  ];
+  const apps = [
+    ["Google", "Chrome", "Application", "chrome.exe"],
+    ["BraveSoftware", "Brave-Browser", "Application", "brave.exe"],
+    ["Microsoft", "Edge", "Application", "msedge.exe"],
+  ];
+  return roots.flatMap((r) => apps.map((a) => path.join(r, ...a)));
+}
+
+const CHROME = process.platform === "win32" ? winChrome() : macChrome;
 export const chromePath = () => CHROME.find((p) => fs.existsSync(p)) || null;
 
 const IMPACT_ORDER = ["direct impact", "what to expect", "worth knowing", "good to be aware"];

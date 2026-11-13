@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import ts from "typescript";
 
 /* Link tagging, tested against the real module rather than a copy of it.
@@ -16,7 +17,7 @@ const src = fs.readFileSync(new URL("../src/lib/utm.ts", import.meta.url), "utf8
 const js = ts.transpileModule(src, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
 const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "utm-")), "utm.mjs");
 fs.writeFileSync(out, js);
-const { taggedLink, sourceFor, slug, linkFault } = await import(`file://${out}`);
+const { taggedLink, sourceFor, slug, linkFault } = await import(pathToFileURL(out).href);
 
 test("the source follows from the platform, never from typing", () => {
   assert.equal(sourceFor("Instagram"), "instagram");

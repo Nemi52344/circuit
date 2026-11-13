@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import ts from "typescript";
 
 /* The permission table, tested against the real one.
@@ -14,7 +15,7 @@ const src = fs.readFileSync(new URL("../src/lib/roles.ts", import.meta.url), "ut
 const js = ts.transpileModule(src, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
 const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "roles-")), "roles.mjs");
 fs.writeFileSync(out, js);
-const { can, asRole, isRole, grantsOf, ROLES } = await import(`file://${out}`);
+const { can, asRole, isRole, grantsOf, ROLES } = await import(pathToFileURL(out).href);
 
 const as = (role) => ({ role });
 

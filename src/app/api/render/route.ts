@@ -81,7 +81,7 @@ export const POST = handle(async (req) => {
   const t = now();
   const model = b.model || "gpt_image_2_5";
   if (!MCP_MODELS.some((m) => m.id === model)) {
-    return bad(`${model} is not a Higgsfield MCP model. Pick one of: ${MCP_MODELS.map((m) => m.id).join(", ")}`);
+    return bad(`${model} is not a Magnific MCP model. Pick one of: ${MCP_MODELS.map((m) => m.id).join(", ")}`);
   }
   db.prepare(
     `INSERT INTO render_jobs (id, provider, kind, model, prompt, inspiration_id, product_id, params, status, created_at, updated_at)

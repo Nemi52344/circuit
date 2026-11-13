@@ -6,6 +6,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { getDb, getSetting, setSetting, findByHash, uploadDir, putFileFromPath, newId, now, type FileRow } from "@/lib/db";
 import { userError } from "@/lib/http";
+import { findTool } from "@/lib/toolpath";
 
 /* Raw collateral — the photographs and video from our own shoots — brought in from wherever it
    already lives, and stored in the database like every other file: a folder dropped on the Library, a zip downloaded from SharePoint, or a folder
@@ -186,7 +187,7 @@ async function importBrochure(src: string, rel: string, opts: { tags?: string })
   const name = path.basename(rel);
   const title = name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ");
   let text = "";
-  const tool = ["/opt/homebrew/bin/pdftotext", "/usr/local/bin/pdftotext"].find((p) => fs.existsSync(p));
+  const tool = findTool("pdftotext");
   if (tool) {
     try { text = (await run(tool, ["-layout", "-enc", "UTF-8", src, "-"], { timeout: 120000, maxBuffer: 20_000_000 })).stdout.slice(0, 200000); } catch { /* a scanned PDF has no text; the file still counts */ }
   }

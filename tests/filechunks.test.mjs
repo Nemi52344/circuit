@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import ts from "typescript";
 
 /* Files live in the database as fixed-size chunks; a video being scrubbed reads only the chunks
@@ -11,7 +12,7 @@ const src = fs.readFileSync(new URL("../src/lib/filechunks.ts", import.meta.url)
 const js = ts.transpileModule(src, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
 const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "chunks-")), "filechunks.mjs");
 fs.writeFileSync(out, js);
-const c = await import(`file://${out}`);
+const c = await import(pathToFileURL(out).href);
 
 test("every file takes at least one chunk, and exactly as many as it needs", () => {
   assert.equal(c.chunkCount(0, 10), 1);

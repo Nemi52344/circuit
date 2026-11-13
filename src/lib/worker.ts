@@ -25,6 +25,18 @@ const state: State = (global.__circuitWorker ??= { timer: null, busy: false, cur
 
 const listBrandsCount = () => listBrands().length;
 
+/* Why a routine failed is recorded on the step that failed, not on the run — the run only
+   carries the word "failed". Without reading the steps, the history and the health banner
+   both end up saying "failed: failed", which tells whoever reads it nothing at all. */
+function stepError(steps: string): string {
+  try {
+    const list = JSON.parse(steps || "[]") as { status?: string; title?: string; error?: string }[];
+    const bad = list.find((x) => x.status === "failed");
+    if (!bad) return "";
+    return bad.error ? `${bad.title}: ${bad.error}` : String(bad.title || "");
+  } catch { return ""; }
+}
+
 const ORDER = ["brand", "ideas", "topics", "research", "slides", "postercopy", "copy"];
 /* The origin this server answered a real request on, falling back to the configured port only
    until the first one arrives. Guessing 3210 outright meant a second copy on another port
@@ -362,8 +374,10 @@ async function brandPass(brandName: string) {
     // routines that are due: the morning check, the weekly review, anything the owner scheduled
     seedWorkflows();
     for (const wf of dueWorkflows()) {
-      const r = await runWorkflow(wf.id).then((run) => ({ ok: run.status !== "failed", status: run.status })).catch((e: Error) => ({ ok: false, status: e.message }));
-      state.history.unshift({ id: "", kind: "workflow", label: `${wf.name}: ${r.status === "waiting" ? "waiting for you" : r.status}`, ok: r.ok, error: r.ok ? "" : String(r.status), started_at: now(), finished_at: now(), seconds: 0 });
+      const r = await runWorkflow(wf.id)
+        .then((run) => ({ ok: run.status !== "failed", status: run.status, why: stepError(run.steps) }))
+        .catch((e: Error) => ({ ok: false, status: "failed", why: e.message }));
+      state.history.unshift({ id: "", kind: "workflow", label: `${wf.name}: ${r.status === "waiting" ? "waiting for you" : r.status}`, ok: r.ok, error: r.ok ? "" : (r.why || String(r.status)), started_at: now(), finished_at: now(), seconds: 0 });
       state.history = state.history.slice(0, 30);
       break; // one routine per pass, so a long one never blocks the rest of the queue
     }

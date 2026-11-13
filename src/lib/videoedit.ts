@@ -9,6 +9,7 @@ import { chromePath } from "@/lib/intelpdf";
 import { runChatGptJson, codexPath } from "@/lib/chatgpt";
 import { userError } from "@/lib/http";
 import { cleanPlan, retime, isNoise, filterGraph, planPrompt, totalLength, esc, LENGTHS, type Line, type Plan, type Overlay } from "@/lib/videoplan";
+import { findTool } from "@/lib/toolpath";
 
 /* The video studio: footage in, a finished reel out, queued as a post.
 
@@ -24,7 +25,9 @@ import { cleanPlan, retime, isNoise, filterGraph, planPrompt, totalLength, esc, 
    taken back. */
 
 const run = promisify(execFile);
-const BIN = (name: string) => [`/opt/homebrew/bin/${name}`, `/usr/local/bin/${name}`].find((p) => fs.existsSync(p)) || "";
+/* ffmpeg, ffprobe and whisper are installed by hand on most machines, so PATH is asked first
+   and the per-platform directories only after. */
+const BIN = (name: string) => findTool(name) || "";
 const MODEL = () => [path.join(DATA_DIR, "models", "ggml-base.bin"), path.join(DATA_DIR, "models", "ggml-base.en.bin")].find((p) => fs.existsSync(p)) || "";
 
 export type VideoOptions = { length: 15 | 30 | 60; captions: boolean; brandmark: boolean; endcard: boolean; brief: string; post_on: string; platform: string };

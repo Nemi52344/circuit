@@ -78,6 +78,18 @@ function logFailure(ref: string, req: Request, e: unknown) {
   if (err.stack) console.error(err.stack.split("\n").slice(1, 4).join("\n"));
 }
 
+/* Being signed in is not permission to change things.
+
+   Most routes ask handle() for nothing beyond a session, so without this a Viewer — the role
+   whose entire description is "reads everything, changes nothing" — could create, edit and
+   delete through any of them, and did: a viewer account created a document and added a
+   competitor, and both were still there afterwards. Holding any one of these three is what
+   separates somebody who makes or signs off work from somebody who only reads it, so an
+   approver keeps working while a viewer stops. A route that wants more than this still says
+   so with handleCan. */
+const CHANGES = /^(POST|PUT|PATCH|DELETE)$/i;
+const MAY_CHANGE: Can[] = ["create", "approve", "manage"];
+
 export function handle(fn: (req: Request, ctx: { params: Promise<Record<string, string>> }) => Promise<Response>) {
   return async (req: Request, ctx: { params: Promise<Record<string, string>> }) => {
     try {
@@ -90,8 +102,13 @@ export function handle(fn: (req: Request, ctx: { params: Promise<Record<string, 
       const path = url.pathname;
       const internal = req.headers.get(INTERNAL_HEADER);
       const isInternal = Boolean(internal && internal === internalSecret());
-      if (!isInternal && !isOpen(path) && anyUsers() && !userForRequest(req)) {
+      const guarded = !isInternal && !isOpen(path);
+      const who = guarded ? userForRequest(req) : null;
+      if (guarded && anyUsers() && !who) {
         return bad("Sign in to continue", 401);
+      }
+      if (guarded && who && CHANGES.test(req.method) && !MAY_CHANGE.some((c) => can(who, c))) {
+        return bad("A Viewer can read everything here, but cannot change it", 403);
       }
       /* Circuit calling itself on behalf of one brand. Never honoured from a browser: without
          the secret, a header asking for another brand's books is simply ignored. */

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import ts from "typescript";
 
 /* Who gets a piece of work, read from the real module the Inbox uses. */
@@ -10,7 +11,7 @@ const src = fs.readFileSync(new URL("../src/lib/allocate.ts", import.meta.url), 
 const js = ts.transpileModule(src, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
 const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "alloc-")), "allocate.mjs");
 fs.writeFileSync(out, js);
-const a = await import(`file://${out}`);
+const a = await import(pathToFileURL(out).href);
 
 const P = (id, name, kinds = [], takes_work = true) => ({ id, name, email: "", takes_work, kinds });
 const team = [P("p", "Prasanth R", ["social_post"]), P("g", "Gowtham", ["poster", "video"]), P("m", "Marketing", [], false)];

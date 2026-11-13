@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { getDb, getFile, newId, now, saveFileBuffer, tryFilePath } from "@/lib/db";
+import { chromePath } from "@/lib/intelpdf";
 
 const run = promisify(execFile);
 
@@ -71,14 +72,9 @@ export const TEXT_SAFE = {
   wide: { top: 8, bottom: 10, side: 6 },
 } as const satisfies Record<AspectKey, { top: number; bottom: number; side: number }>;
 
-function chromePath(): string | null {
-  const candidates = [
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-    "/Applications/Chromium.app/Contents/MacOS/Chromium",
-    "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
-  ];
-  return candidates.find((p) => fs.existsSync(p)) ?? null;
-}
+/* The browser comes from lib/intelpdf, which the posters and the briefing already use. This
+   was a second copy of the same list, Mac-only, so exports failed on Windows while posters
+   worked — the kind of difference nobody thinks to look for. */
 
 /* Fits the picture inside the preset rather than cropping to it.
 

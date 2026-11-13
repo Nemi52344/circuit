@@ -190,7 +190,7 @@ export default function SettingsPage() {
     {
       done: Boolean(cc?.higgsfield),
       title: "Connect Higgsfield",
-      detail: checking ? "Checking…" : cc?.higgsfield ? "Connected. Images use your Higgsfield credits." : "Lets Claude create images with your Higgsfield plan.",
+      detail: checking ? "Checking…" : cc?.higgsfield ? "Connected. Images use your Magnific credits." : "Lets Claude create images with your Magnific plan.",
       action: () => claudeAction("add-higgsfield"),
       label: "Connect",
     },

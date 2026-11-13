@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import ts from "typescript";
 
 /* The stock estimate, read from the real module the Admin page and the Work board both use. */
@@ -10,7 +11,7 @@ const src = fs.readFileSync(new URL("../src/lib/stockmath.ts", import.meta.url),
 const js = ts.transpileModule(src, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
 const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "stock-")), "stockmath.mjs");
 fs.writeFileSync(out, js);
-const { stockOutlook } = await import(`file://${out}`);
+const { stockOutlook } = await import(pathToFileURL(out).href);
 
 test("what is left falls by the monthly use since the count", () => {
   const o = stockOutlook({ qty: 304, reorder_at: 50, per_month: 304, counted_at: "2026-10-01" }, "2026-10-16");

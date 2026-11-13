@@ -49,7 +49,10 @@ const PATTERNS = [
 test("nothing decides access by comparing a role to a literal", () => {
   const offenders = [];
   for (const file of walk(SRC)) {
-    const rel = path.relative(SRC, file);
+    /* Separators are normalised because ALLOWED is written with forward slashes and
+       path.relative answers in the platform's own: on Windows every entry missed, and the
+       four files that are allowed to name roles were all reported as breaches. */
+    const rel = path.relative(SRC, file).split(path.sep).join("/");
     if (ALLOWED.some((a) => rel === a)) continue;
     /* Comments are blanked before scanning rather than skipped line by line. This file's own
        explanation of the bug contains the exact SQL that caused it, several lines into a block

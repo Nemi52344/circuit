@@ -16,13 +16,13 @@ export const POST = handleCan("manage", async (req) => {
   }
   if (b.action === "add-higgsfield") {
     const r = await addHiggsfield();
-    if (!r.ok) return bad(`Adding Higgsfield failed: ${r.out.slice(0, 300)}`, 502);
+    if (!r.ok) return bad(`Adding Magnific failed: ${r.out.slice(0, 300)}`, 502);
     await openInTerminal(`${bin} mcp list`);
-    return ok({ started: "add-higgsfield", message: "Higgsfield added. A Terminal window is opening so you can approve its sign-in, then press Recheck." });
+    return ok({ started: "add-higgsfield", message: "Magnific added. A Terminal window is opening so you can approve its sign-in, then press Recheck." });
   }
   if (b.action === "authorise-higgsfield") {
     await openInTerminal(`${bin} mcp list`);
-    return ok({ started: "authorise-higgsfield", message: `Approve the Higgsfield sign-in in the Terminal window, then press Recheck. Server: ${HIGGSFIELD_MCP_URL}` });
+    return ok({ started: "authorise-higgsfield", message: `Approve the Magnific sign-in in the Terminal window, then press Recheck. Server: ${HIGGSFIELD_MCP_URL}` });
   }
   return bad("Unknown action");
 });

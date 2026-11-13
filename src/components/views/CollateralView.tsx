@@ -185,9 +185,9 @@ export default function ImagesPage() {
       {manager ? (
         <details className="col-watch" open={Boolean(watch?.folder)}>
           <summary>Bring in new shoots automatically {watch?.exists ? <span className="col-led on" /> : null}</summary>
-          <p className="small muted">Point Circuit at a folder on this Mac — the OneDrive folder, once the OneDrive app syncs <b>Gowtham / Master</b> here (it appears under <code>~/Library/CloudStorage/OneDrive-…</code>). Every ten minutes anything new in it is added; nothing in the folder is changed.</p>
+          <p className="small muted">Point Circuit at a folder on this computer — the OneDrive folder, once the OneDrive app syncs <b>Gowtham / Master</b> here. On a Mac it appears under <code>~/Library/CloudStorage/OneDrive-…</code>; on Windows under <code>%USERPROFILE%OneDrive - …</code>. Every ten minutes anything new in it is added; nothing in the folder is changed.</p>
           <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-            <input className="input" value={folder} onChange={(e) => setFolder(e.target.value)} placeholder="/Users/…/Library/CloudStorage/OneDrive-…/Gowtham/Master" style={{ flex: 1, minWidth: 260, minHeight: 36 }} aria-label="Folder to watch" />
+            <input className="input" value={folder} onChange={(e) => setFolder(e.target.value)} placeholder="The full path to the folder to watch" style={{ flex: 1, minWidth: 260, minHeight: 36 }} aria-label="Folder to watch" />
             <button type="button" className="btn small" onClick={saveWatch}>Save</button>
             {watch?.exists ? <button type="button" className="btn small ghost" onClick={scanNow}>Look now</button> : null}
           </div>

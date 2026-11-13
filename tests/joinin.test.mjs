@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import ts from "typescript";
 
 /* Which links count as a post worth replying to.
@@ -17,12 +18,12 @@ const src = fs.readFileSync(new URL("../src/lib/joinin.ts", import.meta.url), "u
 const js = ts.transpileModule(src, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
 const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "join-")), "joinin.mjs");
 fs.writeFileSync(out, js);
-const { linkFault, platformOf, PLATFORMS, SEARCHABLE, STATUSES, checkLink } = await import(`file://${out}`);
+const { linkFault, platformOf, PLATFORMS, SEARCHABLE, STATUSES, checkLink } = await import(pathToFileURL(out).href);
 
 /* checkLink reaches the network through lib/sources, which the stub above does not provide.
    These cases drive it with a fake fetch so the decision table is tested, not the internet. */
 const withFetch = async (reply) => {
-  const mod = await import(`file://${out}`);
+  const mod = await import(pathToFileURL(out).href);
   globalThis.__fakeFetch = reply;
   return mod;
 };

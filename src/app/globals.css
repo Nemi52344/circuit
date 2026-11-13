@@ -2159,7 +2159,7 @@ table.data tr.total td { background: rgba(242, 243, 241, .9); border-top-color: 
 .chain-arrow { color: var(--muted); font-style: normal; align-self: center; }
 
 .notes { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); }
-.note-row { display: flex; gap: 10px; align-items: start; justify-content: space-between;
+.note-row { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between;
   background: var(--surface); padding: 9px 11px; }
 .note-row p { margin: 3px 0 0; font-size: 13.5px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 
@@ -2254,7 +2254,7 @@ table.data tr.total td { background: rgba(242, 243, 241, .9); border-top-color: 
 
 /* The series row shows what it will put on every draft, so a wrong picture is spotted on the
    list rather than eight drafts later. */
-.sr-name { display: flex; gap: 9px; align-items: start; }
+.sr-name { display: flex; gap: 9px; align-items: flex-start; }
 .sr-pic { width: 34px; height: 34px; object-fit: cover; border: 1px solid var(--line); flex: none; }
 
 @media (max-width: 560px) {

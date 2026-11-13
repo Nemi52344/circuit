@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import ts from "typescript";
 
 /* The course has to hold together: four levels in order, six lessons each, every check a real
@@ -11,7 +12,7 @@ const src = fs.readFileSync(new URL("../src/lib/syllabus.ts", import.meta.url), 
 const js = ts.transpileModule(src, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
 const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "syl-")), "syllabus.mjs");
 fs.writeFileSync(out, js);
-const s = await import(`file://${out}`);
+const s = await import(pathToFileURL(out).href);
 
 test("four levels, from basics to advanced, six lessons each", () => {
   assert.deepEqual(s.LEVELS.map((l) => l.key), ["basic", "normal", "hard", "advanced"]);

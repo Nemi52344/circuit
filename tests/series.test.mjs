@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import ts from "typescript";
 
 /* When a repeating post actually falls.
@@ -22,7 +23,7 @@ const src = fs.readFileSync(new URL("../src/lib/series.ts", import.meta.url), "u
 const js = ts.transpileModule(src, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
 const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "series-")), "series.mjs");
 fs.writeFileSync(out, js);
-const { datesFor, seriesFault, files } = await import(`file://${out}`);
+const { datesFor, seriesFault, files } = await import(pathToFileURL(out).href);
 
 const weekly = (weekday, at_time = "18:30") => ({ cadence: "weekly", weekday, day_of_month: 1, at_time });
 const monthly = (day_of_month, at_time = "09:00") => ({ cadence: "monthly", weekday: 0, day_of_month, at_time });

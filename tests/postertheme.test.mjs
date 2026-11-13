@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import ts from "typescript";
 
 /* The look a poster is printed in.
@@ -18,7 +19,7 @@ const src = fs.readFileSync(new URL("../src/lib/poster.ts", import.meta.url), "u
 const js = ts.transpileModule(src, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
 const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "circuit-postertheme-")), "poster.mjs");
 fs.writeFileSync(file, js);
-const { posterHtml, THEMES, DEFAULT_THEME, themeOf } = await import(file);
+const { posterHtml, THEMES, DEFAULT_THEME, themeOf } = await import(pathToFileURL(file).href);
 
 const base = { template: "load", size: "post", number: "200", unit: "kg" };
 const markOf = (html) => html.match(/<div class="mark">(.*?)<\/div>/)[1].replace(/<span class="logo"><\/span>/, "").replace(/<\/?i>/g, "");
