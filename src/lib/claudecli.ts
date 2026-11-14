@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 
 const run = promisify(execFile);
 
-/* Circuit talks to the Claude Code CLI already installed on this Mac.
+/* Circuit talks to the Claude Code CLI already installed on this computer.
    It never handles the login itself: it reads the CLI's status and opens the CLI's own
    sign-in in a Terminal window, so the credential stays with Claude Code, not with Circuit. */
 

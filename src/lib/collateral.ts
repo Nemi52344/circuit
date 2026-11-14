@@ -10,7 +10,7 @@ import { findTool } from "@/lib/toolpath";
 
 /* Raw collateral — the photographs and video from our own shoots — brought in from wherever it
    already lives, and stored in the database like every other file: a folder dropped on the Library, a zip downloaded from SharePoint, or a folder
-   on this Mac that Circuit watches (the OneDrive folder, once OneDrive syncs it here).
+   on this computer that Circuit watches (the OneDrive folder, once OneDrive syncs it here).
 
    Every file comes in as ours and free to publish, tagged with the folders it sat in, so
    "Master / Challenger / Studio shoot" is findable as challenger, studio shoot. Nothing is ever
@@ -148,7 +148,7 @@ export function watchSettings(): Watch {
 
 export function setWatchFolder(folder: string): Watch {
   const f = folder.trim().replace(/^~(?=\/)/, os.homedir());
-  if (f && (!path.isAbsolute(f) || !fs.existsSync(f) || !fs.statSync(f).isDirectory())) throw userError("That folder isn't on this Mac — paste its full path, e.g. /Users/you/Library/CloudStorage/OneDrive-…/Gowtham/Master");
+  if (f && (!path.isAbsolute(f) || !fs.existsSync(f) || !fs.statSync(f).isDirectory())) throw userError("That folder isn't on this computer — paste its full path, e.g. /Users/you/Library/CloudStorage/OneDrive-…/Gowtham/Master");
   setSetting("collateral_folder", f);
   return watchSettings();
 }

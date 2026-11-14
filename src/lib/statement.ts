@@ -32,7 +32,7 @@ export type Statement = {
 
 export async function textOf(filePath: string): Promise<string> {
   const bin = pdftotext();
-  if (!bin) throw new Error("pdftotext is not on this Mac — install poppler, or the statement cannot be read");
+  if (!bin) throw new Error("pdftotext is not on this computer — install poppler, or the statement cannot be read");
   return new Promise((resolve, reject) => {
     const p = spawn(bin, ["-layout", "-nopgbrk", filePath, "-"]);
     let out = "";

@@ -292,7 +292,7 @@ async function brandPass(brandName: string) {
       state.history = state.history.slice(0, 30);
     }
 
-    // the online copy in Turso, a few minutes behind this Mac; a failure is shown, never fatal
+    // the online copy in Turso, a few minutes behind this computer; a failure is shown, never fatal
     const { mirrorDue, pushMirror } = await import("@/lib/mirror");
     if (mirrorDue()) {
       const r = await pushMirror().catch((e: Error) => ({ ok: false, sent: 0, deleted: 0, error: e.message }));

@@ -5,8 +5,8 @@ import { Pill } from "@/components/ui";
 import { useMe } from "@/components/Gate";
 import { can } from "@/lib/roles";
 
-/* The online copy in Turso. Circuit keeps working on this Mac; every minute the rows that
-   changed — files included — are sent to Turso, so the data survives the Mac. "Check" rebuilds the whole
+/* The online copy in Turso. Circuit keeps working on this computer; every minute the rows that
+   changed — files included — are sent to Turso, so the data survives this computer. "Check" rebuilds the whole
    database from Turso alone and compares it with this one, row for row. */
 
 type Run = { at: string; ok: boolean; sent: number; deleted: number; tables: number; seconds: number; error?: string; rebuilt?: string[] };
@@ -47,8 +47,8 @@ export function OnlineCopyPanel({ push }: { push: (t: string, tone?: string) => 
       </div>
       <p className="small muted" style={{ marginTop: -8 }}>
         Every minute Circuit sends whatever changed — posts, pictures, videos, logins — to a free online database at Turso,
-        so a complete copy survives if this Mac is lost or breaks. API keys and sign-in sessions never leave the Mac, and
-        passwords only go scrambled{m.finance ? "" : ". Salaries and finance stay on the Mac until you tick the box below"}.
+        so a complete copy survives if this computer is lost or breaks. API keys and sign-in sessions never leave this computer, and
+        passwords only go scrambled{m.finance ? "" : ". Salaries and finance stay on this computer until you tick the box below"}.
       </p>
 
       <div className="form-grid">
@@ -73,7 +73,7 @@ export function OnlineCopyPanel({ push }: { push: (t: string, tone?: string) => 
       {m.check ? (
         <div className={`note ${m.check.ok ? "ok" : "bad"}`}>
           {m.check.ok
-            ? <>Restore tested {fmtDate(m.check.at)}: rebuilt from the online backup alone, and all {m.check.rows.toLocaleString("en-IN")} records match this Mac.</>
+            ? <>Restore tested {fmtDate(m.check.at)}: rebuilt from the online backup alone, and all {m.check.rows.toLocaleString("en-IN")} records match this computer.</>
             : <>Restore tested {fmtDate(m.check.at)}: the online backup differs — {m.check.differences.join("; ")}</>}
         </div>
       ) : null}

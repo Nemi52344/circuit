@@ -69,7 +69,7 @@ export function VideoStudio() {
   return (
     <div className="stack" style={{ gap: 16 }}>
       {view}
-      {missing.length ? <div className="note small">Not on this Mac: {missing.join(", ")}. {d.tools.ffmpeg ? "Edits still run, without those parts." : "The video studio needs ffmpeg."}</div> : null}
+      {missing.length ? <div className="note small">Not on this computer: {missing.join(", ")}. {d.tools.ffmpeg ? "Edits still run, without those parts." : "The video studio needs ffmpeg."}</div> : null}
 
       <section className="vs-grid">
         <div className="vs-pick">

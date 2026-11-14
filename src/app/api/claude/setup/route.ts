@@ -8,7 +8,7 @@ export const maxDuration = 60;
 export const POST = handleCan("manage", async (req) => {
   const b = await readJson<{ action?: string }>(req);
   const bin = claudePath();
-  if (!bin) return bad("The Claude Code CLI is not installed on this Mac. Install Claude Code, then reopen this page.", 424);
+  if (!bin) return bad("The Claude Code CLI is not installed on this computer. Install Claude Code, then reopen this page.", 424);
 
   if (b.action === "login") {
     await openInTerminal(`${bin} auth login`);

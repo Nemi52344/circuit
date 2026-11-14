@@ -85,7 +85,7 @@ function SignIn({ setup, done }: { setup: boolean; done: () => void }) {
           <div>
             <h2 style={{ margin: 0 }}>Set a new password</h2>
             <p className="small muted" style={{ margin: "6px 0 0" }}>
-              A one-time code has been written to <code>data/recovery-code.txt</code> on the Mac
+              A one-time code has been written to <code>data/recovery-code.txt</code> on this computer
               running Circuit. It is printed in that window&rsquo;s terminal too. It lasts fifteen minutes.
             </p>
           </div>

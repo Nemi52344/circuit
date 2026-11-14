@@ -26,7 +26,7 @@ const cookie = (req: Request, token: string, maxAge: number) =>
 /* Guessing. Once Circuit is reachable from the internet, anyone can try passwords, so ten
    misses for one email from one address, or fifty from one address, stops that address for
    fifteen minutes. The address is Cloudflare's report of the real visitor, which the visitor
-   cannot set; on this Mac there is no such header and everything counts as "local". */
+   cannot set; on this computer there is no such header and everything counts as "local". */
 const WINDOW = 15 * 60 * 1000;
 const misses = new Map<string, { n: number; first: number }>();
 const missKeys = (req: Request, email: string) => {
@@ -87,7 +87,7 @@ export const POST = handle(async (req) => {
 
   /* Locked out. Asking for a code says nothing about whether the account exists — the answer is
      the same either way — because this route is open and anyone who can reach the port could
-     otherwise use it to find out who works here. The code itself only ever appears on this Mac. */
+     otherwise use it to find out who works here. The code itself only ever appears on this computer. */
   if (b.action === "recover") {
     requestRecovery(b.email || "");
     return ok({ asked: true, where: "data/recovery-code.txt" });

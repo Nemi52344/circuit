@@ -99,17 +99,17 @@ function jobsCheck(): Check {
 
 function backupCheck(): Check {
   const last = lastBackup();
-  if (!last) return { key: "backup", label: "Backup on this Mac", state: "warn", detail: "No automatic backup yet. The first one runs shortly after the app starts.", fix: { label: "Backup", href: "/settings?tab=data" } };
+  if (!last) return { key: "backup", label: "Backup on this computer", state: "warn", detail: "No automatic backup yet. The first one runs shortly after the app starts.", fix: { label: "Backup", href: "/settings?tab=data" } };
   const hours = (Date.now() - new Date(last.at).getTime()) / 3600000;
   const state: CheckState = hours > 48 ? "bad" : hours > 30 ? "warn" : "ok";
-  return { key: "backup", label: "Backup on this Mac", state, ...(state === "ok" ? {} : { fix: { label: "Backup", href: "/settings?tab=data" } }), detail: `${ago(last.at)} · ${mb(last.db_bytes)} of database, every file inside it. The last three days are kept.` };
+  return { key: "backup", label: "Backup on this computer", state, ...(state === "ok" ? {} : { fix: { label: "Backup", href: "/settings?tab=data" } }), detail: `${ago(last.at)} · ${mb(last.db_bytes)} of database, every file inside it. The last three days are kept.` };
 }
 
-/* The copy off this Mac. Sends run every minute, so one older than ten minutes means they've stopped. */
+/* The copy off this computer. Sends run every minute, so one older than ten minutes means they've stopped. */
 function onlineCheck(): Check {
   const m = mirrorSettings();
   const fix = { label: "Backup", href: "/settings?tab=data" };
-  if (!m.ready) return { key: "online", label: "Online backup", state: "warn", detail: "Not set up, so losing this Mac would lose everything.", fix };
+  if (!m.ready) return { key: "online", label: "Online backup", state: "warn", detail: "Not set up, so losing this computer would lose everything.", fix };
   if (!m.last) return { key: "online", label: "Online backup", state: "warn", detail: "Set up, but nothing has been sent yet.", fix };
   if (!m.last.ok) return { key: "online", label: "Online backup", state: "bad", detail: `The last send failed ${ago(m.last.at)}: ${(m.last.error || "").slice(0, 120)}`, fix };
   const mins = (Date.now() - new Date(m.last.at).getTime()) / 60000;

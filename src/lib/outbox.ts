@@ -15,7 +15,7 @@ export type Outgoing = {
   /* The same message in HTML, so the Zap can send the branded version rather than raw text. */
   html?: string;
   /* A file the Zap can attach. It has to be an address on the internet — Zapier cannot reach
-     anything on this Mac — which is what the Supabase copy of the PDF is for. */
+     anything on this computer — which is what the Supabase copy of the PDF is for. */
   attachment_url?: string; attachment_name?: string;
 };
 export type SentMail = {

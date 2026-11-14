@@ -3,13 +3,13 @@ import { getDb, getSetting, setSetting, newId, now } from "@/lib/db";
 /* Sending mail with a real attachment, straight from Circuit.
 
    The Zapier route can carry words but not files: its email step only accepts a file it can
-   already reach on the internet, and Circuit's PDFs live on this Mac. Microsoft Graph takes the
+   already reach on the internet, and Circuit's PDFs live on this computer. Microsoft Graph takes the
    file itself — the bytes, base64, in the same request — so the briefing arrives as a proper
    PDF attachment and nothing has to be hosted anywhere.
 
    It signs in as the app against the company's own Microsoft 365 tenant (client credentials),
    so it keeps working at 9am whether or not anyone is at the machine. The three values below
-   are pasted once by the owner and stay on this Mac. */
+   are pasted once by the owner and stay on this computer. */
 
 export type GraphSettings = { tenant: string; client_id: string; has_secret: boolean; from: string; to: string; ready: boolean };
 

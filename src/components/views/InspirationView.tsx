@@ -1042,7 +1042,7 @@ function FolderBox({ folders, competitors, onRescan, onImport, push }: {
     title: img.name,
     subtitle: folder,
     tags: img.imported ? [{ label: "already imported", tone: "ok" }] : [],
-    fields: [{ label: "Size", value: `${Math.round(img.size / 1024)} KB` }, { label: "On this Mac", value: img.path }],
+    fields: [{ label: "Size", value: `${Math.round(img.size / 1024)} KB` }, { label: "On this computer", value: img.path }],
   })), [pics]);
 
   const setRootPath = async (value: string | null) => {

@@ -6,7 +6,7 @@ import { can, type Can } from "@/lib/roles";
 
    A notification is a row: who it is for, what happened, and where to go about it. The page
    asks for new ones every few seconds and shows each as a pop-up — inside Circuit always, and
-   as a Mac or phone notification when the person has allowed it.
+   as a desktop or phone notification when the person has allowed it.
 
    Two ways in. Things that happen at a moment — work assigned to you — notify as they happen.
    Things that are true for a while — a routine waiting on someone, work due tomorrow — are

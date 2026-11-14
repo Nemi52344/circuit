@@ -12,7 +12,7 @@ export const runtime = "nodejs";
 
    Everything is behind a shared secret, and the secret must exist: there is deliberately no
    "no secret set, so allow it" path, because this endpoint is meant to be reachable from
-   outside this Mac and that is exactly the default that gets people hurt. */
+   outside this computer and that is exactly the default that gets people hurt. */
 
 type Rpc = { jsonrpc?: string; id?: unknown; method?: string; params?: Record<string, unknown> };
 
@@ -112,7 +112,7 @@ export const POST = handle(async (req) => {
   return failure(id, -32601, `Unknown method: ${method}`);
 });
 
-/* A plain GET is somebody checking the door is there — including this Mac's owner, pasting the
+/* A plain GET is somebody checking the door is there — including this computer's owner, pasting the
    URL into a browser to see whether the tunnel is up. It says what this is and nothing about
    what is behind it. */
 export const GET = handle(async () =>

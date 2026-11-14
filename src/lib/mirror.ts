@@ -10,12 +10,12 @@ import {
 
 /* The online copy, in Turso.
 
-   Circuit keeps working on the database on this Mac — nothing about how a page reads or writes
+   Circuit keeps working on the database on this computer — nothing about how a page reads or writes
    changes, and nothing waits on the internet. Every minute the rows that changed since the last
    push are sent to a Turso database, one per brand, and rows deleted here are deleted there:
    every table, every file (the bytes are rows in file_chunks), and — from the BNC push — the
    shared accounts as accounts_* tables. So the copy online is a minute behind, never ahead,
-   and if this Mac is lost the data is not.
+   and if this computer is lost the data is not.
 
    Why not run on Turso's own driver and let it sync: it was tried on a copy of the real data.
    It crashes the process when loaded beside the driver the tests use, it adds a field to every
@@ -281,7 +281,7 @@ const secs = (from: number) => Math.round((Date.now() - from) / 100) / 10;
 /* ---- getting it back ---- */
 
 /* Builds a working database file from the online copy alone: every table and index as Turso
-   has it, and every row. This is what you would do if this Mac were lost — and it is also how
+   has it, and every row. This is what you would do if this computer were lost — and it is also how
    the copy is checked, because a backup nobody has restored is a hope, not a backup. */
 export async function restoreToFile(file: string, url?: string, token?: string, opts: { skipBlobs?: boolean } = {}): Promise<{ tables: number; rows: number }> {
   const [schema] = await pipeline([{ sql: "SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY type DESC" }], url, token);

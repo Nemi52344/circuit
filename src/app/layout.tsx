@@ -31,7 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <div className="workspace-inner"><Allowed>{children}</Allowed></div>
               <footer className="foot">
                 <span>Circuit · BNC Motors, a division of Nemi</span>
-                <span>Saved on this Mac</span>
+                <span>Saved on this computer</span>
               </footer>
             </main>
           </div>

@@ -137,7 +137,7 @@ export function addRequest(body: string, by: Pick<User, "id"> | null, sender = "
   return getRequest(id)!;
 }
 
-/* Requests nobody has read yet — mail that arrived while ChatGPT was busy, or while the Mac was
+/* Requests nobody has read yet — mail that arrived while ChatGPT was busy, or while this computer was
    off. The worker reads them one at a time, oldest first. */
 export const unreadRequests = (limit = 3) =>
   getDb().prepare("SELECT * FROM requests WHERE status = 'new' ORDER BY created_at LIMIT ?").all(limit) as Request[];

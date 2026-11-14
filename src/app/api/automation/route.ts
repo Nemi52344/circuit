@@ -10,7 +10,7 @@ export const GET = handle(async () => {
   return ok({
     time: timePicture(30),
     people: peopleTime(),
-    /* The skills and servers sitting on this Mac, read off the disk each time. */
+    /* The skills and servers sitting on this computer, read off the disk each time. */
     toolbox: toolbox(),
     connections: conns,
     bots: bs,

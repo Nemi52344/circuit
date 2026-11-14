@@ -12,7 +12,7 @@ export const runtime = "nodejs";
 /* Anyone signed in takes tests. The bank with its answers, the team's scores and new questions
    are for whoever can run the marketing — the Manager and the Admin. */
 
-const taker = (user: { id: string; name: string } | null) => user || { id: "local", name: "This Mac" };
+const taker = (user: { id: string; name: string } | null) => user || { id: "local", name: "This computer" };
 
 export const GET = handleUser(async (_req, user) => {
   const runs = can(user, "manage");

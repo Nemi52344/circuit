@@ -115,7 +115,7 @@ export function MailPanel({ push, part = "mail" }: { push: (t: string, tone?: st
         <Pill tone={s.supabase?.ready ? "ok" : "warn"}>{s.supabase?.ready ? "Connected" : "Not set up"}</Pill>
       </div>
       <p className="small muted" style={{ margin: 0 }}>
-        Keeps every morning briefing online as well as on this Mac, and gives each PDF a web address — which is what lets the
+        Keeps every morning briefing online as well as on this computer, and gives each PDF a web address — which is what lets the
         Zapier email route attach it.
       </p>
       <details className="more">

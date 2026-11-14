@@ -5,7 +5,7 @@ import { DATA_DIR, getDb, getSetting, setSetting, now } from "@/lib/db";
 /* A copy of everything, made by the app itself once a day: sqlite's own backup, safe while the
    app is writing. Since the files moved into the database, that one copy holds every picture,
    video and PDF as well — about half a gigabyte a day — so three days are kept here. The copy
-   in Turso, a minute behind, is the one that survives this Mac. */
+   in Turso, a minute behind, is the one that survives this computer. */
 
 export const BACKUP_DIR = path.join(DATA_DIR, "backups");
 const KEEP = 3;

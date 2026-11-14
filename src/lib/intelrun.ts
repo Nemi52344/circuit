@@ -8,7 +8,7 @@ import { getDb } from "@/lib/db";
    The sweep itself is only the first half. A briefing nobody can open is not a briefing, so the
    same call prints the PDF, keeps the bytes in the database and — when Supabase is connected —
    puts a copy where it has an address on the internet, which is the only way an email service
-   can attach a file made on this Mac.
+   can attach a file made on this computer.
 
    This lives on its own because two callers need the identical thing: the Run it now button and
    the 09:00 routine. When they each had their own version, the routine quietly skipped the PDF. */

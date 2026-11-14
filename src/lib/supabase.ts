@@ -1,6 +1,6 @@
 import { getDb, getSetting, setSetting } from "@/lib/db";
 
-/* Supabase: the briefings kept somewhere other than this Mac.
+/* Supabase: the briefings kept somewhere other than this computer.
 
    Two things it gives Circuit that a local file cannot. The archive stops living only on one
    laptop, so a briefing can be opened from a phone or by somebody else. And a PDF put in
@@ -83,7 +83,7 @@ export async function uploadPdf(name: string, bytes: Buffer): Promise<{ ok: bool
 
 /* Any file, put somewhere with a public address.
 
-   Instagram and Facebook will not take an image from this Mac: their publishing API asks for a
+   Instagram and Facebook will not take an image from this computer: their publishing API asks for a
    URL it can fetch for itself. Supabase is already holding the briefings, so it holds the
    pictures that are about to be posted too — for as long as it takes Meta to collect them. */
 export async function uploadPublic(folder: string, name: string, bytes: Buffer, mime: string): Promise<{ ok: boolean; url: string; error: string }> {
@@ -104,7 +104,7 @@ export async function uploadPublic(folder: string, name: string, bytes: Buffer, 
   }
 }
 
-/* The briefing's own row, so the archive can be read without this Mac being on. */
+/* The briefing's own row, so the archive can be read without this computer being on. */
 export async function upsertBriefing(row: { date: string; theme: string; items: number; summary: string; pdf_url: string; markdown: string }) {
   if (!supabaseSettings().ready) return { ok: false, error: "Supabase isn't set up yet" };
   try {
@@ -132,7 +132,7 @@ export const TABLE_SQL = `create table if not exists daily_intel (
   created_at  timestamptz default now()
 );`;
 
-/* Everything that is only on this Mac, sent up in one go.
+/* Everything that is only on this computer, sent up in one go.
 
    Briefings made before Supabase was set up — and any whose upload failed at the time — have
    bytes in SQLite but no address on the internet, so they cannot be attached to an email or

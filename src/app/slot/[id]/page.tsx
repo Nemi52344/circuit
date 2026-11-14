@@ -1367,7 +1367,7 @@ function SignOffPanel({ d, load, push }: { d: Detail; load: () => Promise<void>;
       </div>
       {needsNew ? <div className="actions"><button className="btn primary" type="button" disabled={busy} onClick={request}>{busy ? "Preparing…" : so.requested ? "Ask again for this version" : "Ask for sign-off"}</button></div> : null}
       {so.changes ? <p className="small muted" style={{ margin: 0 }}>Make the changes in Drafts, Refine or Captions. Saving them creates a new version, then ask again.</p> : null}
-      {bases && !bases.network.length ? <p className="small muted" style={{ margin: 0 }}>Links work on this Mac only right now. Connect to Wi-Fi so people on the same network can open them.</p> : null}
+      {bases && !bases.network.length ? <p className="small muted" style={{ margin: 0 }}>Links work on this computer only right now. Connect to Wi-Fi so people on the same network can open them.</p> : null}
     </section>
   );
 }

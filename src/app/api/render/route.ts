@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 /* The render queue is the bridge between Circuit and an MCP-capable assistant.
    Circuit never calls Higgsfield itself: it queues an approved job, an agent with the
    Higgsfield MCP drains the queue, and the result comes back through /api/render/deliver.
-   Nothing leaves this Mac until a human queues a job. */
+   Nothing leaves this computer until a human queues a job. */
 
 const STATUSES = ["queued", "running", "done", "failed", "cancelled"];
 

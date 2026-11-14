@@ -86,7 +86,7 @@ const DAILY = /-\d{4}-\d{2}-\d{2}-\d{4}\.db$/;
 const backupLabel = (name: string) => DAILY.test(name) ? "Daily backup"
   : `Before ${name.replace(/^[a-z0-9]+-before-/, "").replace(/\.db$/, "").replace(/-?\d{8}(-\d{6})?|-?\d{4}-\d{2}-\d{2}/g, "").replace(/-+/g, " ").trim() || "a change"}`;
 
-/* The daily backup kept on this Mac: one database file per day, files and all. */
+/* The daily backup kept on this computer: one database file per day, files and all. */
 export function LocalBackupPanel({ push }: { push: (t: string, tone?: string) => void }) {
   const { health, setHealth } = useHealth();
   const [busy, setBusy] = useState(false);
@@ -107,7 +107,7 @@ export function LocalBackupPanel({ push }: { push: (t: string, tone?: string) =>
   return (
     <section className="panel stack">
       <div className="panel-head" style={{ marginBottom: 0 }}>
-        <h3>Backups on this Mac</h3>
+        <h3>Backups on this computer</h3>
         <span className="actions">
           {health ? (daily ? <Pill tone="ok">{daily} daily kept</Pill> : <Pill tone="warn">None yet</Pill>) : null}
           <button className="btn small primary" type="button" disabled={busy} onClick={backUp}>{busy ? "Backing up…" : "Back up now"}</button>
@@ -115,7 +115,7 @@ export function LocalBackupPanel({ push }: { push: (t: string, tone?: string) =>
       </div>
       <p className="small muted" style={{ margin: 0 }}>
         Once a day Circuit saves a full copy of its database — posts, pictures, videos and logins — into <code>data/backups</code>.
-        The last three days are kept. This protects against a mistake; the online backup below protects against losing the Mac.
+        The last three days are kept. This protects against a mistake; the online backup below protects against losing this computer.
       </p>
       {list.length ? (
         <ul className="health-list">

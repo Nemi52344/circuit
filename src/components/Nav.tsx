@@ -132,7 +132,7 @@ export default function Nav() {
         ) : null}
       </nav>
       <div className="side-note">
-        <strong>Runs on the marketing Mac</strong>
+        <strong>Runs on the marketing computer</strong>
         Everything is in its database, copied online every minute. Nothing is posted or sent without you.
       </div>
     </aside>

@@ -3,7 +3,7 @@ import path from "node:path";
 import os from "node:os";
 import { getSetting } from "@/lib/db";
 
-/* What this Mac can actually do, as opposed to what Circuit does itself.
+/* What this computer can actually do, as opposed to what Circuit does itself.
 
    The agents in Circuit are one thing; the skills sitting in the Claude folder and the servers
    wired into ChatGPT are another, and until now there was nowhere that said what any of them
@@ -41,7 +41,7 @@ export type Toolbox = {
 const home = os.homedir();
 
 /* Where skills live. The first two are where Claude Code keeps them; the third is the agency
-   folder this Mac happens to have, included when it is there and silently skipped when it is
+   folder this computer happens to have, included when it is there and silently skipped when it is
    not. More can be added in Settings. */
 const defaultRoots = (): string[] => [
   path.join(home, ".claude", "skills"),
@@ -169,7 +169,7 @@ export function toolbox(): Toolbox {
   else if (!cx.servers.length) notes.push("ChatGPT is set up but has no servers wired into it.");
   /* Said plainly, because the two columns are not the same kind of thing and the page should
      not imply that they are. */
-  notes.push("Claude works from skills — folders of instructions. ChatGPT works from servers it can call. They are listed side by side because both run on this Mac, not because they are the same thing.");
+  notes.push("Claude works from skills — folders of instructions. ChatGPT works from servers it can call. They are listed side by side because both run on this computer, not because they are the same thing.");
 
   return {
     skills: skills.sort((a, b) => (a.group || "~").localeCompare(b.group || "~") || a.name.localeCompare(b.name)),

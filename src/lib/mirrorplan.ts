@@ -1,6 +1,6 @@
 /* What goes into the online copy, and what has changed since the last push.
 
-   The database stays on this Mac, where Circuit runs; Turso holds a complete copy, sent every
+   The database stays on this computer, where Circuit runs; Turso holds a complete copy, sent every
    minute — every table, every file (in file_chunks), finance when the Admin allows it, and the
    accounts from accounts.db as accounts_* tables. This file is the part of that which needs no database and no
    network — which tables and rows are sent, how a row is spelled for Turso's HTTP API, and
@@ -11,7 +11,7 @@
    machinery's own bookkeeping. */
 export const LOCAL_ONLY = new Set(["sessions", "users", "mirror_rows"]);
 
-/* Salaries, bills, revenue. Kept on the Mac unless the Admin decides they may go online. */
+/* Salaries, bills, revenue. Kept on this computer unless the Admin decides they may go online. */
 export const FINANCE_TABLES = new Set(["bills", "charges", "opex", "people", "pnl", "statements", "subscriptions"]);
 
 /* Settings rows that are credentials, and rows that change every few seconds and would make
@@ -34,9 +34,9 @@ export const SEND_EVERY_MS = 60 * 1000;
 export const COUNT_EVERY_MS = 60 * 60 * 1000;
 
 /* Columns that are credentials inside an ordinary table: the link an outside approver signs
-   off with. Sent blank; the links are made again from the Mac if ever needed. */
+   off with. Sent blank; the links are made again from this computer if ever needed. */
 export const SECRET_COLUMNS: Record<string, string[]> = { approvals: ["token"] };
-export const HIDDEN = "(kept on the Mac)";
+export const HIDDEN = "(kept on this computer)";
 
 export function maskRow(table: string, row: Record<string, unknown>): Record<string, unknown> {
   const cols = SECRET_COLUMNS[table];
@@ -173,7 +173,7 @@ export const GUIDE: Record<string, Guide> = {
   series: { section: S.cal, holds: "Repeating posts — the same kind of post every week or month.", row: "One series" },
   signoffs: { section: S.cal, holds: "Who approved or rejected each post, and when.", row: "One decision on one post" },
   approvers: { section: S.cal, holds: "People outside Circuit who sign work off by link.", row: "One approver" },
-  approvals: { section: S.cal, holds: "Sign-off requests sent to approvers and their answers. The link itself stays on the Mac.", row: "One request to one approver" },
+  approvals: { section: S.cal, holds: "Sign-off requests sent to approvers and their answers. The link itself stays on this computer.", row: "One request to one approver" },
   inspirations: { section: S.make, holds: "Reference posts collected from competitors and elsewhere, with where they came from.", row: "One reference" },
   creations: { section: S.make, holds: "Pictures Circuit made with ChatGPT or other tools, and which brief they answer.", row: "One generated picture" },
   creation_notes: { section: S.make, holds: "Comments left on a generated picture.", row: "One comment" },
@@ -224,7 +224,7 @@ export function guideRows(local: string[], mirrored: string[]): GuideRow[] {
   const on = new Set(mirrored);
   const rows: GuideRow[] = [{
     table_name: GUIDE_TABLE, section: S.start,
-    what_it_holds: "This guide. The database is a complete copy of Circuit, which runs on the marketing Mac; Circuit sends what changed every minute, so this copy is about a minute behind. Change things in Circuit, not here — edits made here are overwritten. Every picture, video and PDF is here too, in file_chunks. Sign-in sessions and API keys are never sent; passwords only as one-way hashes.",
+    what_it_holds: "This guide. The database is a complete copy of Circuit, which runs on the marketing computer; Circuit sends what changed every minute, so this copy is about a minute behind. Change things in Circuit, not here — edits made here are overwritten. Every picture, video and PDF is here too, in file_chunks. Sign-in sessions and API keys are never sent; passwords only as one-way hashes.",
     one_row_is: "One table", online: "yes",
   }];
   for (const t of local) {
@@ -232,7 +232,7 @@ export function guideRows(local: string[], mirrored: string[]): GuideRow[] {
     const g = GUIDE[t] || { section: "Other", holds: "Not described yet.", row: "" };
     rows.push({
       table_name: t, section: g.section, what_it_holds: g.holds, one_row_is: g.row,
-      online: on.has(t) ? "yes" : FINANCE_TABLES.has(t) ? "no — kept on the Mac (Admin's choice)" : "no",
+      online: on.has(t) ? "yes" : FINANCE_TABLES.has(t) ? "no — kept on this computer (Admin's choice)" : "no",
     });
   }
   return rows.sort((a, b) => a.section.localeCompare(b.section) || a.table_name.localeCompare(b.table_name));

@@ -17,7 +17,7 @@ import path from "path";
 
    Three things live behind this door and nothing else. Mark cannot read the brand, the bills,
    the card statements, the settings or any token — not because it would misuse them, but
-   because this endpoint is reachable from outside this Mac and an endpoint should offer only
+   because this endpoint is reachable from outside this computer and an endpoint should offer only
    what its job needs. If LinkedIn and X publishing ever moves into Circuit proper, this file
    is the only thing to delete. */
 

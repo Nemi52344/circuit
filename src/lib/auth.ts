@@ -7,7 +7,7 @@ import { getAccountsDb, newId, now, accountSetting, setAccountSetting, DATA_DIR 
 /* Who is using Circuit, and what they are allowed to do.
 
    Until now Circuit had no idea who was at the keyboard. That was defensible while it only ever
-   answered on localhost — the Mac's own login was the door. It stops being defensible the
+   answered on localhost — this computer's own login was the door. It stops being defensible the
    moment anything reaches it from outside, and it was already thin: the token in this database
    can publish to a page with 1,618 followers and an Instagram account with 4,841, and the only
    thing standing in front of it was whoever happened to be sitting here.
@@ -187,7 +187,7 @@ export function userForRequest(req: Request): User | null {
    something else.
 
    The proof is the filesystem. Circuit writes a one-time code into data/, and you read it off
-   the Mac the app is running on. Anyone who can read that file can already read the database
+   this computer the app is running on. Anyone who can read that file can already read the database
    sitting beside it, so this hands out nothing they did not have; but somebody who merely
    reached the page over the office Wi-Fi cannot see it, and that is the whole distinction.
    The code itself is never stored — only its hash — so the database never holds a live one. */

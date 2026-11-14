@@ -69,7 +69,7 @@ export default function IntelPage() {
     }
   };
 
-  /* Sends up anything that is still only on this Mac — briefings from before Supabase was
+  /* Sends up anything that is still only on this computer — briefings from before Supabase was
      connected, and any whose upload failed at the time. */
   const pushUp = async () => {
     setBusy(true);
@@ -200,7 +200,7 @@ export default function IntelPage() {
           <div className="panel-head" style={{ marginBottom: 0 }}>
             <h3>The briefings themselves</h3>
             <span className="actions">
-              {d.supabase?.ready ? <Pill tone="ok">also in Supabase</Pill> : <Pill tone="warn">on this Mac only</Pill>}
+              {d.supabase?.ready ? <Pill tone="ok">also in Supabase</Pill> : <Pill tone="warn">on this computer only</Pill>}
               {d.supabase?.ready ? (
                 <button className="btn small ghost" type="button" disabled={busy} onClick={pushUp} title="Send up anything that has no link yet">
                   {busy ? "Sending…" : "Push to Supabase"}

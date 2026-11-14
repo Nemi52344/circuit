@@ -4,7 +4,7 @@ import { api, postJson, PLATFORMS } from "@/lib/api";
 import { Pill } from "@/components/ui";
 
 /* Connecting Circuit to Postiz, which is what actually puts a post on a platform.
-   The key is pasted by the owner and stays on this Mac, like every other credential here. */
+   The key is pasted by the owner and stays on this computer, like every other credential here. */
 
 type Channel = { id: string; name: string; identifier: string; picture?: string; disabled?: boolean };
 type Status = { connected: boolean; base: string; channels: Channel[]; error: string; map: Record<string, string>; self_hosted: boolean };

@@ -73,7 +73,7 @@ export default function Topbar() {
         <b>{item ? item.label : "Circuit"}</b>
       </div>
       <div className="tb-right">
-        {/* Switching changes the brand for everyone on this Mac, so it is a manager's call. */}
+        {/* Switching changes the brand for everyone on this computer, so it is a manager's call. */}
         {can(me, "manage") ? <BrandSwitcher /> : null}
         <div className="branch-pill" title="Primary product">
           <span className="dot" />

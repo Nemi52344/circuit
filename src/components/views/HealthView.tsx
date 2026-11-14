@@ -53,13 +53,13 @@ export default function AutomationPage() {
           <h2>Health</h2>
           <p className="lede">
             Everything that runs without being asked, everything Circuit is plugged into, and every skill on this
-            Mac — the bots, the connections, the routines and what Claude and ChatGPT can do.
+            computer — the bots, the connections, the routines and what Claude and ChatGPT can do.
           </p>
         </div>
       </div>
 
       <div className="stat-row">
-        <div className="stat"><b>{d.toolbox?.skills.length ?? 0}</b><span>skills on this Mac</span></div>
+        <div className="stat"><b>{d.toolbox?.skills.length ?? 0}</b><span>skills on this computer</span></div>
         <div className="stat"><b>{s.live}</b><span>connected and live</span></div>
         <div className="stat"><b>{s.missing}</b><span>not connected</span></div>
         <div className="stat"><b>{s.bots_working}</b><span>bots working</span></div>
@@ -262,7 +262,7 @@ export default function AutomationPage() {
           <div className="panel-head">
             <h3>Skills</h3>
             <span className="muted small">
-              Read from the folders on this Mac every time this page loads{d.toolbox.model ? ` · ChatGPT is on ${d.toolbox.model}` : ""}
+              Read from the folders on this computer every time this page loads{d.toolbox.model ? ` · ChatGPT is on ${d.toolbox.model}` : ""}
             </span>
           </div>
 
@@ -272,7 +272,7 @@ export default function AutomationPage() {
             {d.toolbox.roots.map((r) => (
               <span key={r.path} className={`root ${r.exists ? "" : "gone"}`}>
                 <code>{r.path}</code>
-                <i>{r.exists ? `${r.found} skill${r.found === 1 ? "" : "s"}` : "not on this Mac"}</i>
+                <i>{r.exists ? `${r.found} skill${r.found === 1 ? "" : "s"}` : "not on this computer"}</i>
               </span>
             ))}
           </div>

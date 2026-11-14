@@ -13,7 +13,7 @@ const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "mirror-")), "mirror
 fs.writeFileSync(out, js);
 const m = await import(pathToFileURL(out).href);
 
-test("sign-ins, password copies and finance stay on the Mac unless finance is allowed", () => {
+test("sign-ins, password copies and finance stay on this computer unless finance is allowed", () => {
   const all = ["posts", "sessions", "users", "mirror_rows", "people", "bills", "pnl", "settings", "sqlite_sequence"];
   assert.deepEqual(m.tablesToMirror(all, false), ["posts", "settings"]);
   assert.deepEqual(m.tablesToMirror(all, true), ["posts", "people", "bills", "pnl", "settings"]);
@@ -80,10 +80,10 @@ test("every table Circuit creates is explained in the guide", () => {
   assert.deepEqual(missing, [], `add these to GUIDE in mirrorplan.ts: ${missing.join(", ")}`);
 });
 
-test("the guide says plainly which tables are online and which stay on the Mac", () => {
+test("the guide says plainly which tables are online and which stay on this computer", () => {
   const rows = m.guideRows(["posts", "people", "sessions", "settings"], ["posts", "settings"]);
   assert.equal(rows[0].table_name, m.GUIDE_TABLE);
-  assert.equal(rows.find((r) => r.table_name === "people").online, "no — kept on the Mac (Admin's choice)");
+  assert.equal(rows.find((r) => r.table_name === "people").online, "no — kept on this computer (Admin's choice)");
   assert.equal(rows.find((r) => r.table_name === "posts").online, "yes");
   assert.equal(rows.some((r) => r.table_name === "sessions"), false);
 });

@@ -94,7 +94,7 @@ export function handle(fn: (req: Request, ctx: { params: Promise<Record<string, 
   return async (req: Request, ctx: { params: Promise<Record<string, string>> }) => {
     try {
       const url = new URL(req.url);
-      /* Remembered from a request made on this Mac, so the worker can call back on the port
+      /* Remembered from a request made on this computer, so the worker can call back on the port
          this server is really listening on. Only a local one: through the tunnel the address is
          the public one, and the worker's calls — secret and all — would go out to the internet
          and back in. */

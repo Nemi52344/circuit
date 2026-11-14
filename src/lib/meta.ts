@@ -212,7 +212,7 @@ export async function tokenInfo(token: string): Promise<TokenInfo | null> {
 /* Keeping the connection alive without anyone remembering to. Meta will swap a valid token for
    a fresh 60-day one, but only while the current one still works — so Circuit does the swap
    well before the end rather than after it. The app id and secret are pasted once by the owner
-   and stay on this Mac beside the token; Circuit never sends them anywhere except to Meta. */
+   and stay on this computer beside the token; Circuit never sends them anywhere except to Meta. */
 export function renewalCredentials() {
   const id = getSetting("meta_app_id") || "";
   const secret = getSetting("meta_app_secret") || "";

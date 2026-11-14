@@ -44,7 +44,7 @@ export const POST = handle(async (req) => {
     return sent.status === "sent" ? ok(sent) : bad(sent.error, 502);
   }
 
-  /* Push everything that is still only on this Mac up to Supabase — the briefings made before
+  /* Push everything that is still only on this computer up to Supabase — the briefings made before
      it was connected, and any whose upload failed at the time. */
   if (b.action === "sync") {
     if (!supabaseSettings().ready) return bad("Supabase isn't set up yet — Settings, then Sending mail");

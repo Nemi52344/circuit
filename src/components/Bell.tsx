@@ -6,7 +6,7 @@ import { api, postJson, fmtDate } from "@/lib/api";
 /* The bell: what needs you, said as it happens.
 
    Asks for anything new every fifteen seconds. Each new one appears as a pop-up in the corner
-   for a few seconds, and — once the person has said yes — as a Mac or phone notification too,
+   for a few seconds, and — once the person has said yes — as a desktop or phone notification too,
    so it reaches them when Circuit is in a background tab. The bell keeps the list; opening an
    item takes you to where it is about and marks it read. */
 
@@ -88,7 +88,7 @@ export function Bell() {
               {unread ? <button className="btn small ghost" type="button" onClick={readAll}>Mark all read</button> : null}
             </div>
             {perm === "default" ? (
-              <button className="bell-allow" type="button" onClick={allow}>Also show these as Mac / phone notifications</button>
+              <button className="bell-allow" type="button" onClick={allow}>Also show these as desktop / phone notifications</button>
             ) : null}
             {notes.length ? notes.map((n) => (
               <button key={n.id} type="button" className={`bell-item ${n.read_at ? "" : "unread"}`} onClick={() => go(n)}>

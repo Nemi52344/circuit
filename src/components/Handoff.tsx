@@ -10,7 +10,7 @@ import { useToast } from "@/components/ui";
    dot — has a browser already signed in to both, so this is the door it comes through.
 
    The two lists below are not reassurance, they are the specification. An endpoint reachable
-   from outside this Mac should be readable at a glance by the person who owns the Mac. */
+   from outside this computer should be readable at a glance by the person who owns this computer. */
 
 type State = { on: boolean; platforms: string[]; waiting: number; exposes: string[]; withholds: string[] };
 
@@ -83,7 +83,7 @@ export function HandoffPanel() {
 
       <p className="small muted" style={{ margin: 0 }}>
         {/* Said plainly, because it is the part that is easy to skip and expensive to get wrong. */}
-        This only works while Circuit can be reached from the internet, which it cannot be today — it runs on this Mac at
+        This only works while Circuit can be reached from the internet, which it cannot be today — it runs on this computer at
         localhost. Mark runs on OpenAI&apos;s computer, so a tunnel has to point at this machine before any of it does
         anything. Turn this on when you are ready to set that up, not before.
       </p>
