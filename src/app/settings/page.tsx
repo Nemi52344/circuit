@@ -12,7 +12,7 @@ import { META_SCOPES } from "@/lib/types";
 
 type ClaudeStatus = { installed: boolean; cli_path: string | null; version: string; logged_in: boolean; auth_method: string; higgsfield: boolean; mcp_detail: string; ready: boolean };
 
-type Settings = { has_key: boolean; key_hint: string; has_meta: boolean; meta_hint: string; has_hf: boolean; hf_hint: string; ig_user_id: string; brand: Brand; defaults: Brand; meta_app_id?: string; meta_scopes?: string[] };
+type Settings = { has_key: boolean; key_hint: string; has_meta: boolean; meta_hint: string; has_hf: boolean; hf_hint: string; has_pexels: boolean; pexels_hint: string; ig_user_id: string; brand: Brand; defaults: Brand; meta_app_id?: string; meta_scopes?: string[] };
 
 /* Settings in five tabs, each named for what it answers: is anything broken, what Circuit is
    connected to, the brand it writes for, who approves posts, and where the backups are. Most
@@ -44,6 +44,7 @@ export default function SettingsPage() {
   const [hfId, setHfId] = useState("");
   const [hfSecret, setHfSecret] = useState("");
   const [hfMsg, setHfMsg] = useState<{ ok: boolean; message: string } | null>(null);
+  const [pexels, setPexels] = useState("");
   const [cc, setCc] = useState<ClaudeStatus | null>(null);
   const [ccBusy, setCcBusy] = useState(false);
   const [brand, setBrand] = useState<Brand | null>(null);
@@ -84,6 +85,24 @@ export default function SettingsPage() {
     await postJson("/api/settings", { gemini_key: null });
     setTestMsg(null);
     push("Key removed");
+    load();
+  };
+  const savePexels = async () => {
+    if (!pexels.trim()) return push("Paste the key first", "bad");
+    setBusy(true);
+    try {
+      /* The server checks it against Pexels before storing, so a bad key comes back as an
+         error here rather than being accepted and failing silently later. */
+      await postJson("/api/settings", { pexels_key: pexels });
+      setPexels("");
+      push("Pexels connected", "ok");
+      load();
+    } catch (e) { push((e as Error).message, "bad"); } finally { setBusy(false); }
+  };
+  const removePexels = async () => {
+    if (!confirm("Remove the stored Pexels key?")) return;
+    await postJson("/api/settings", { pexels_key: null });
+    push("Pexels key removed");
     load();
   };
   const saveMeta = async () => {
@@ -183,7 +202,7 @@ export default function SettingsPage() {
     {
       done: Boolean(cc?.logged_in),
       title: "Sign in to Claude",
-      detail: checking ? "Checking…" : !cc?.installed ? "Claude Code isn't installed on this Mac yet." : cc.logged_in ? "Signed in." : "Opens Claude's own sign-in in a Terminal window.",
+      detail: checking ? "Checking…" : !cc?.installed ? "Claude Code isn't installed on this computer yet." : cc.logged_in ? "Signed in." : "Opens Claude's own sign-in in a Terminal window.",
       action: () => claudeAction("login"),
       label: "Sign in",
     },
@@ -297,8 +316,8 @@ export default function SettingsPage() {
       {tab === "data" ? (<>
       <div className="note small">
         <strong>Where your data lives</strong>
-        Everything — posts, pictures, videos, logins and the money pages — is kept in one database on this Mac, in the app&apos;s <code>data</code> folder.
-        There are two backups of it below: a daily one on this Mac, and one online that updates every minute.
+        Everything — posts, pictures, videos, logins and the money pages — is kept in one database on this computer, in the app&apos;s <code>data</code> folder.
+        There are two backups of it below: a daily one on this computer, and one online that updates every minute.
       </div>
       <LocalBackupPanel push={push} />
       <OnlineCopyPanel push={push} />
@@ -323,6 +342,18 @@ export default function SettingsPage() {
               {s.has_hf ? <button className="btn ghost" type="button" onClick={removeHf}>Remove</button> : null}
             </div>
             {hfMsg ? <div className={`note ${hfMsg.ok ? "ok" : "bad"}`}>{hfMsg.message}</div> : null}
+          </div>
+
+          <div className="stack" style={{ gap: 10 }}>
+            <div className="panel-head" style={{ marginBottom: 0 }}><h3>Pexels API key</h3>{s.has_pexels ? <Pill tone="ok">Connected</Pill> : <Pill>Not connected</Pill>}</div>
+            <p className="small muted">Photographs for the Inspiration library, free to use commercially with no credit line required. Get a key at <a href="https://www.pexels.com/api/" target="_blank" rel="noreferrer" style={{ textDecoration: "underline" }}>pexels.com/api</a>. Without one the search falls back to Wikimedia Commons alone.</p>
+            <div className="fetch-row">
+              <input className="input" type="password" value={pexels} onChange={(e) => setPexels(e.target.value)} placeholder="Paste API key" aria-label="Pexels API key" autoComplete="off" />
+              <span className="actions">
+                <button className="btn primary" type="button" disabled={busy} onClick={savePexels}>Save</button>
+                {s.has_pexels ? <button className="btn ghost" type="button" onClick={removePexels}>Remove</button> : null}
+              </span>
+            </div>
           </div>
 
           <div className="stack" style={{ gap: 10 }}>
@@ -472,7 +503,7 @@ function ChatGptPanel({ push }: { push: (t: string, tone?: string) => void }) {
         {!gpt ? <Pill>Checking…</Pill> : ready ? <Pill tone="ok">Signed in</Pill> : <Pill tone="warn">{gpt.installed ? "Not signed in" : "Not installed"}</Pill>}
       </div>
       <p className="small muted" style={{ margin: 0 }}>Uses your own ChatGPT account to learn your brand, find topic ideas, research posts and write captions. It only searches the web and sends back text; pictures come from Claude and Higgsfield below.</p>
-      {gpt && !gpt.installed ? <div className="note bad"><strong>ChatGPT desktop app not found</strong>Install the ChatGPT app for Mac; it includes Codex, which Circuit uses to sign in.</div> : null}
+      {gpt && !gpt.installed ? <div className="note bad"><strong>ChatGPT desktop app not found</strong>Install the ChatGPT desktop app; it includes Codex, which Circuit uses to sign in.</div> : null}
       <div className="actions">
         {gpt?.installed && !gpt.logged_in ? <button className="btn primary" type="button" disabled={busy} onClick={login}>Sign in with ChatGPT</button> : null}
         <button className="btn small" type="button" onClick={() => { loadGpt(); loadW(); }}>Check again</button>
@@ -644,7 +675,7 @@ function InstagramConnect({ hasToken, push }: { hasToken: boolean; push: (t: str
               app_secret: (document.getElementById("fb-app-secret") as HTMLInputElement).value,
             })}>{busy === "extend" ? "Renewing…" : "Renew and keep it renewed"}</button>
           </div>
-          <p className="small muted" style={{ margin: "6px 0 0" }}>Both stay on this Mac beside the token and are only ever sent to Meta. The token has to be alive when you press this — if it has already expired, generate a fresh one in the Explorer and save it first.</p>
+          <p className="small muted" style={{ margin: "6px 0 0" }}>Both stay on this computer beside the token and are only ever sent to Meta. The token has to be alive when you press this — if it has already expired, generate a fresh one in the Explorer and save it first.</p>
         </div>
       ) : null}
       {choices.length > 1 ? (

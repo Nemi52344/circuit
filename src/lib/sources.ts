@@ -50,7 +50,7 @@ function assertPublicHttp(u: URL) {
   ) throw new Error("Local and private addresses are not fetched");
 }
 
-export async function fetchUrl(url: string, opts: { ua?: string; accept?: string; maxBytes?: number; timeoutMs?: number } = {}) {
+export async function fetchUrl(url: string, opts: { ua?: string; accept?: string; maxBytes?: number; timeoutMs?: number; auth?: string } = {}) {
   const u = new URL(url);
   assertPublicHttp(u);
   const max = opts.maxBytes ?? 3_000_000;
@@ -62,6 +62,9 @@ export async function fetchUrl(url: string, opts: { ua?: string; accept?: string
         "user-agent": opts.ua ?? BROWSER_UA,
         accept: opts.accept ?? "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "accept-language": "en-IN,en;q=0.9",
+        /* Only set when a caller passes a key. fetch drops this header on a redirect to
+           another origin, so the key cannot be carried somewhere it was not meant for. */
+        ...(opts.auth ? { authorization: opts.auth } : {}),
       },
       redirect: "follow",
       signal: ctrl.signal,
