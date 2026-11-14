@@ -5,6 +5,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { getDb, newId, now, saveFileBuffer, tryFilePath } from "@/lib/db";
 import type { IntelItem } from "@/lib/intel";
+import { pathToFileURL } from "node:url";
 
 const run = promisify(execFile);
 
@@ -12,7 +13,7 @@ const run = promisify(execFile);
 
    Same shape as the one that used to come out of a chat window: a dark NEMI cover, the day's
    theme, a summary table, then the full feed graded by impact, and the sources at the back.
-   Rendered by printing a page in headless Chrome, which is already on this Mac — no library,
+   Rendered by printing a page in headless Chrome, which is already on this computer — no library,
    no service, nothing new to install. */
 
 /* Chrome does the rendering, and where it sits depends on the machine. The list was written
@@ -161,7 +162,7 @@ export function listPdfs(limit = 30): StoredPdf[] {
 /* Prints the page to PDF, keeps the bytes in the database and a copy in the library. */
 export async function briefingPdf(date: string, theme: string, summary: string, items: IntelItem[]) {
   const bin = chromePath();
-  if (!bin) throw new Error("No Chrome or Brave on this Mac to print the PDF with");
+  if (!bin) throw new Error("No Chrome or Brave on this computer to print the PDF with");
   const work = fs.mkdtempSync(path.join(os.tmpdir(), "circuit-intel-"));
   const htmlPath = path.join(work, "briefing.html");
   const pdfPath = path.join(work, "briefing.pdf");
@@ -169,7 +170,7 @@ export async function briefingPdf(date: string, theme: string, summary: string, 
   try {
     await run(bin, [
       "--headless", "--disable-gpu", "--no-sandbox", "--no-pdf-header-footer",
-      "--virtual-time-budget=6000", `--print-to-pdf=${pdfPath}`, `file://${htmlPath}`,
+      "--virtual-time-budget=6000", `--print-to-pdf=${pdfPath}`, pathToFileURL(htmlPath).href,
     ], { timeout: 120000, maxBuffer: 8_000_000 });
     if (!fs.existsSync(pdfPath)) throw new Error("Chrome finished without writing a PDF");
     const buf = fs.readFileSync(pdfPath);

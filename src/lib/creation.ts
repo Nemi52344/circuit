@@ -5,6 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { getDb, getFile, newId, now, saveFileBuffer, tryFilePath } from "@/lib/db";
 import { chromePath } from "@/lib/intelpdf";
+import { pathToFileURL } from "node:url";
 
 const run = promisify(execFile);
 
@@ -95,12 +96,12 @@ export async function exportCreation(creationId: string, aspect: AspectKey): Pro
   if (!fs.existsSync(abs)) throw new Error("Its picture is not stored in Circuit");
 
   const chrome = chromePath();
-  if (!chrome) throw new Error("Chrome is needed to export a shape and was not found on this Mac");
+  if (!chrome) throw new Error("Chrome is needed to export a shape and was not found on this computer");
 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "circuit-aspect-"));
   const htmlPath = path.join(dir, "page.html");
   const outPath = path.join(dir, "out.png");
-  const src = `file://${abs.split("/").map(encodeURIComponent).join("/")}`;
+  const src = pathToFileURL(abs).href;
   fs.writeFileSync(
     htmlPath,
     `<!doctype html><meta charset="utf-8"><style>
@@ -115,7 +116,7 @@ export async function exportCreation(creationId: string, aspect: AspectKey): Pro
       `--window-size=${size.w},${size.h}`,
       "--default-background-color=0B0D0BFF",
       "--virtual-time-budget=6000",
-      `--screenshot=${outPath}`, `file://${htmlPath}`,
+      `--screenshot=${outPath}`, pathToFileURL(htmlPath).href,
     ], { timeout: 120000, maxBuffer: 8_000_000 });
     if (!fs.existsSync(outPath)) throw new Error("Chrome finished without writing the export");
     const buf = fs.readFileSync(outPath);

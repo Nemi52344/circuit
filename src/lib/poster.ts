@@ -5,6 +5,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { getDb, newId, now, saveFileBuffer, getFile, tryFilePath } from "@/lib/db";
 import { chromePath } from "@/lib/intelpdf";
+import { pathToFileURL } from "node:url";
 
 const run = promisify(execFile);
 
@@ -17,7 +18,7 @@ const run = promisify(execFile);
    bike is not the Challenger, and a generated number is a lie with a typeface.
 
    So this renders a template instead: the brand's own words and the brand's own photography,
-   set in HTML and printed by the headless Chrome already on this Mac. No model, no credits,
+   set in HTML and printed by the headless Chrome already on this computer. No model, no credits,
    no queue, and the same output every time from the same input, which is what makes it a
    template rather than a roll of the dice.
 
@@ -125,7 +126,10 @@ function photoPath(fileId?: string | null): string | null {
   return fs.existsSync(full) ? full : null;
 }
 
-const fileUri = (abs: string) => `file://${abs.split("/").map(encodeURIComponent).join("/")}`;
+/* Built by Node rather than by hand. Splitting on "/" does nothing to a Windows path, so the
+   old version percent-encoded the drive letter and every separator into the host and Chrome
+   rendered a broken image where the bike should be. */
+const fileUri = (abs: string) => pathToFileURL(abs).href;
 
 /* The NEMI mark, carried inside the page. It is drawn as a mask so it takes the accent colour,
    and Chrome will not use a file:// picture as a mask — so the few bytes travel with the HTML,
@@ -415,7 +419,7 @@ export type MadePoster = { file_id: string; creation_id: string | null; name: st
    draws its thumbnail from. Doing only the first is what made the first attempt invisible. */
 export async function makePoster(spec: PosterSpec, opts: { slot_id?: string | null; title?: string } = {}): Promise<MadePoster> {
   const bin = chromePath();
-  if (!bin) throw new Error("No Chrome or Brave on this Mac to render the poster with");
+  if (!bin) throw new Error("No Chrome or Brave on this computer to render the poster with");
   const { w, h } = SIZES[spec.size] || SIZES.post;
 
   const work = fs.mkdtempSync(path.join(os.tmpdir(), "circuit-poster-"));
@@ -430,7 +434,7 @@ export async function makePoster(spec: PosterSpec, opts: { slot_id?: string | nu
       /* Long enough for the web font to arrive. Without it Chrome shoots the fallback face and
          every line comes out the wrong width. */
       "--virtual-time-budget=8000",
-      `--screenshot=${outPath}`, `file://${htmlPath}`,
+      `--screenshot=${outPath}`, pathToFileURL(htmlPath).href,
     ], { timeout: 120000, maxBuffer: 8_000_000 });
 
     if (!fs.existsSync(outPath)) throw new Error("Chrome finished without writing the poster");

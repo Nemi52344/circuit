@@ -10,10 +10,11 @@ import { runChatGptJson, codexPath } from "@/lib/chatgpt";
 import { userError } from "@/lib/http";
 import { cleanPlan, retime, isNoise, filterGraph, planPrompt, totalLength, esc, LENGTHS, type Line, type Plan, type Overlay } from "@/lib/videoplan";
 import { findTool } from "@/lib/toolpath";
+import { pathToFileURL } from "node:url";
 
 /* The video studio: footage in, a finished reel out, queued as a post.
 
-   Everything runs on this Mac. ffmpeg reads and cuts; Whisper (whisper.cpp, with the model in
+   Everything runs on this computer. ffmpeg reads and cuts; Whisper (whisper.cpp, with the model in
    data/models) hears what is said, translated to English for the captions; ChatGPT looks at
    frames and the transcript and chooses the moments, the opening line, the post's caption and
    the closing call to action; Chrome draws the captions, the brand mark and the end card as
@@ -36,7 +37,7 @@ export type VideoJob = {
   options: string; plan: string; output_file_id: string; post_id: string; error: string; created_by: string; created_at: string; updated_at: string;
 };
 
-/* What this Mac can do, for the page to say plainly before anybody waits on a job that cannot run. */
+/* What this computer can do, for the page to say plainly before anybody waits on a job that cannot run. */
 export function videoTools() {
   return { ffmpeg: Boolean(BIN("ffmpeg") && BIN("ffprobe")), whisper: Boolean(BIN("whisper-cli") && MODEL()), chrome: Boolean(chromePath()), chatgpt: Boolean(codexPath()) };
 }
@@ -49,7 +50,7 @@ export function queueVideo(sourceFileId: string, opts: Partial<VideoOptions>, by
   if (!f || !f.mime.startsWith("video/")) throw userError("Pick a video from the library");
   if (f.kind === "inspiration") throw userError("That is another brand's video from Inspiration — only our own footage can be edited and posted");
   const tools = videoTools();
-  if (!tools.ffmpeg) throw userError("ffmpeg isn't installed on this Mac — the video studio needs it");
+  if (!tools.ffmpeg) throw userError("ffmpeg isn't installed on this computer — the video studio needs it");
   const length = (LENGTHS as readonly number[]).includes(Number(opts.length)) ? Number(opts.length) as VideoOptions["length"] : 30;
   const post_on = /^\d{4}-\d{2}-\d{2}$/.test(opts.post_on || "") ? opts.post_on! : new Date(Date.now() + 86400000).toISOString().slice(0, 10);
   const options: VideoOptions = {
@@ -197,12 +198,12 @@ export function retryVideo(id: string) {
 
 async function still(work: string, name: string, html: string, w: number, h: number, clear: boolean): Promise<string> {
   const bin = chromePath();
-  if (!bin) throw new Error("No Chrome or Brave on this Mac to draw the captions with");
+  if (!bin) throw new Error("No Chrome or Brave on this computer to draw the captions with");
   const page = path.join(work, `${name}.html`);
   const png = path.join(work, `${name}.png`);
   fs.writeFileSync(page, html);
   await run(bin, ["--headless", "--disable-gpu", "--no-sandbox", "--hide-scrollbars", "--force-device-scale-factor=1", `--window-size=${w},${h}`,
-    ...(clear ? ["--default-background-color=00000000"] : []), `--screenshot=${png}`, `file://${page}`], { timeout: 60000 });
+    ...(clear ? ["--default-background-color=00000000"] : []), `--screenshot=${png}`, pathToFileURL(page).href], { timeout: 60000 });
   if (!fs.existsSync(png)) throw new Error("Chrome did not draw the caption");
   return png;
 }
